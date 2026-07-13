@@ -1,0 +1,28 @@
+INSERT INTO corporate_kpis
+(
+    corporate_id,
+    kpi_date,
+    total_regions,
+    total_districts,
+    total_stores,
+    active_stores,
+    total_revenue,
+    total_orders,
+    average_order_value,
+    customer_count,
+    cancelled_orders
+)
+VALUES
+(
+    1,
+    '2026-07-11',
+    4,
+    15,
+    185,
+    181,
+    20185000.00,
+    71910,
+    280.70,
+    76060,
+    659
+);
