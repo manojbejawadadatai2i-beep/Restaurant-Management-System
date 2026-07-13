@@ -25,7 +25,7 @@ if __name__ == "__main__":
     try:
         with engine.connect() as conn:
             version = conn.execute(text("SELECT version();")).scalar()
-        print(f"DATABASE URL = {DATABASE_URL}")
+        # print(f"DATABASE URL = {DATABASE_URL}")
         print("✅ Database connected successfully!")
         print(version)
 
