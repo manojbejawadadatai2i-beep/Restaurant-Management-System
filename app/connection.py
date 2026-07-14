@@ -1,7 +1,7 @@
 # pyrefly: ignore [missing-import]
 from sqlalchemy import create_engine, text
 
-DATABASE_URL = "postgresql://postgres:Manoj%402005@localhost:5432/restaurant_dashboard"
+DATABASE_URL = "postgresql://postgres:yourpassword@localhost:5432/restaurant_dashboard"
 engine = create_engine(DATABASE_URL)
 
 # Print table columns for debugging
