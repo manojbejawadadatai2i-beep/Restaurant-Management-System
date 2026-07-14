@@ -1,5 +1,6 @@
 INSERT INTO roles (role_name)
 VALUES
+('Admin'),
 ('Corporate'),
 ('Regional Manager'),
 ('District Manager'),

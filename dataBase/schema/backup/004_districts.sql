@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS districts (
 
     district_name VARCHAR(100) NOT NULL,
 
+    manager_name VARCHAR(100),
+
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
 
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -29,6 +29,25 @@ CREATE TABLE IF NOT EXISTS corporates (
 );
 
 -- ----------------------------------------------------------------------------
+-- 2b. admin
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS admin (
+    admin_id SERIAL PRIMARY KEY,
+    corporate_id INTEGER NOT NULL,
+    corporate_name VARCHAR(100) NOT NULL,
+
+    CONSTRAINT fk_admin_corporate
+        FOREIGN KEY (corporate_id)
+        REFERENCES corporates(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_admin_corporate_name
+        FOREIGN KEY (corporate_name)
+        REFERENCES corporates(corporate_name)
+        ON UPDATE CASCADE
+);
+
+-- ----------------------------------------------------------------------------
 -- 3. regions
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS regions (
@@ -36,6 +55,7 @@ CREATE TABLE IF NOT EXISTS regions (
     corporate_id INTEGER NOT NULL,
     region_code VARCHAR(20) NOT NULL UNIQUE,
     region_name VARCHAR(100) NOT NULL,
+    manager_name VARCHAR(100),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -56,6 +76,7 @@ CREATE TABLE IF NOT EXISTS districts (
     region_id INTEGER NOT NULL,
     district_code VARCHAR(20) NOT NULL UNIQUE,
     district_name VARCHAR(100) NOT NULL,
+    manager_name VARCHAR(100),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
