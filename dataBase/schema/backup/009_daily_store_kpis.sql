@@ -14,6 +14,9 @@ CREATE TABLE daily_store_kpis (
     total_revenue NUMERIC(12,2) NOT NULL DEFAULT 0
         CHECK (total_revenue >= 0),
 
+    today_expenses NUMERIC(12,2) NOT NULL DEFAULT 0
+        CHECK (today_expenses >= 0),
+
     total_orders INTEGER NOT NULL DEFAULT 0
         CHECK (total_orders >= 0),
 
