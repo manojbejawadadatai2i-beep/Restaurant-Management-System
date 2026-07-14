@@ -250,6 +250,7 @@ CREATE TABLE IF NOT EXISTS corporate_kpis (
     total_stores INTEGER NOT NULL DEFAULT 0,
     active_stores INTEGER NOT NULL DEFAULT 0,
     total_revenue NUMERIC(12,2) NOT NULL DEFAULT 0,
+    total_expenses NUMERIC(12,2) NOT NULL DEFAULT 0,
     total_orders INTEGER NOT NULL DEFAULT 0,
     average_order_value NUMERIC(12,2) NOT NULL DEFAULT 0,
     customer_count INTEGER NOT NULL DEFAULT 0,

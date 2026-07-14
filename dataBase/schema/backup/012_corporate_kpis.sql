@@ -23,6 +23,8 @@ CREATE TABLE corporate_kpis (
 
     total_revenue NUMERIC(12,2) NOT NULL DEFAULT 0,
 
+    total_expenses NUMERIC(12,2) NOT NULL DEFAULT 0,
+
     total_orders INTEGER NOT NULL DEFAULT 0,
 
     average_order_value NUMERIC(12,2) NOT NULL DEFAULT 0,
