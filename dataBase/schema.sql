@@ -28,24 +28,6 @@ CREATE TABLE IF NOT EXISTS corporates (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- ----------------------------------------------------------------------------
--- 2b. admin
--- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS admin (
-    admin_id SERIAL PRIMARY KEY,
-    corporate_id INTEGER NOT NULL,
-    corporate_name VARCHAR(100) NOT NULL,
-
-    CONSTRAINT fk_admin_corporate
-        FOREIGN KEY (corporate_id)
-        REFERENCES corporates(id)
-        ON DELETE CASCADE,
-
-    CONSTRAINT fk_admin_corporate_name
-        FOREIGN KEY (corporate_name)
-        REFERENCES corporates(corporate_name)
-        ON UPDATE CASCADE
-);
 
 -- ----------------------------------------------------------------------------
 -- 3. regions
