@@ -45,6 +45,8 @@ const seedDatabase = async () => {
       CREATE TABLE users (
         id SERIAL PRIMARY KEY,
         username VARCHAR(100) NOT NULL UNIQUE,
+        email VARCHAR(255) UNIQUE,
+        password VARCHAR(255),
         role VARCHAR(50) NOT NULL, -- 'Store Manager', 'District Manager', 'Regional Manager', 'Corporate Administrator', 'Administrator'
         assigned_store_id INT REFERENCES stores(id) ON DELETE SET NULL,
         assigned_district_id INT REFERENCES districts(id) ON DELETE SET NULL,
@@ -162,11 +164,20 @@ const seedDatabase = async () => {
     }
 
     // 6. Insert Users
+    const getEmail = (name) => name.toLowerCase().replace(/ /g, '_') + '@restaurant.com';
+    const defaultPassword = 'password123';
+
     // Corporate Admin (Corporate Administrator)
     await client.query(`
-      INSERT INTO users (username, role, assigned_store_id, assigned_district_id, assigned_region_id) 
-      VALUES ('Corporate Admin', 'Corporate Administrator', NULL, NULL, NULL)
-    `);
+      INSERT INTO users (username, email, password, role, assigned_store_id, assigned_district_id, assigned_region_id) 
+      VALUES ('Corporate Admin', $1, $2, 'Corporate Administrator', NULL, NULL, NULL)
+    `, [getEmail('Corporate Admin'), defaultPassword]);
+
+    // System Administrator (Administrator)
+    await client.query(`
+      INSERT INTO users (username, email, password, role, assigned_store_id, assigned_district_id, assigned_region_id) 
+      VALUES ('System Admin', $1, $2, 'Administrator', NULL, NULL, NULL)
+    `, [getEmail('System Admin'), defaultPassword]);
 
     // Region Managers
     const regionManagers = [
@@ -176,26 +187,28 @@ const seedDatabase = async () => {
     ];
     for (const rm of regionManagers) {
       await client.query(`
-        INSERT INTO users (username, role, assigned_store_id, assigned_district_id, assigned_region_id) 
-        VALUES ($1, 'Regional Manager', NULL, NULL, $2)
-      `, [rm.username, rm.region_id]);
+        INSERT INTO users (username, email, password, role, assigned_store_id, assigned_district_id, assigned_region_id) 
+        VALUES ($1, $2, $3, 'Regional Manager', NULL, NULL, $4)
+      `, [rm.username, getEmail(rm.username), defaultPassword, rm.region_id]);
     }
 
     // District Managers (A to I)
     const districtLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
     for (let i = 1; i <= 9; i++) {
+      const name = `District ${districtLetters[i - 1]} Manager`;
       await client.query(`
-        INSERT INTO users (username, role, assigned_store_id, assigned_district_id, assigned_region_id) 
-        VALUES ($1, 'District Manager', NULL, $2, NULL)
-      `, [`District ${districtLetters[i - 1]} Manager`, i]);
+        INSERT INTO users (username, email, password, role, assigned_store_id, assigned_district_id, assigned_region_id) 
+        VALUES ($1, $2, $3, 'District Manager', NULL, $4, NULL)
+      `, [name, getEmail(name), defaultPassword, i]);
     }
 
     // Store Managers (1 to 18)
     for (let i = 1; i <= 18; i++) {
+      const name = `Store Manager ${i}`;
       await client.query(`
-        INSERT INTO users (username, role, assigned_store_id, assigned_district_id, assigned_region_id) 
-        VALUES ($1, 'Store Manager', $2, NULL, NULL)
-      `, [`Store Manager ${i}`, i]);
+        INSERT INTO users (username, email, password, role, assigned_store_id, assigned_district_id, assigned_region_id) 
+        VALUES ($1, $2, $3, 'Store Manager', $4, NULL, NULL)
+      `, [name, getEmail(name), defaultPassword, i]);
     }
 
     // 7. Insert Menu Items

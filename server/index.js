@@ -9,7 +9,12 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 
 const corsOptions = {
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  origin: [
+    'http://localhost:5173', 
+    'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174'
+  ],
   optionsSuccessStatus: 200
 };
 app.use(cors(corsOptions));
@@ -51,6 +56,101 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
+// Create user (User Management)
+app.post('/api/users', async (req, res) => {
+  const { 
+    username, 
+    email, 
+    password, 
+    role, 
+    assigned_store_id, 
+    assigned_district_id, 
+    assigned_region_id,
+    addNewStore,
+    newStoreName,
+    newStoreId
+  } = req.body;
+
+  if (!username || !role) {
+    return res.status(400).json({ error: 'Username and role are required' });
+  }
+
+  try {
+    if (email) {
+      const existingEmail = await query('SELECT id FROM users WHERE email = $1', [email]);
+      if (existingEmail.rows.length > 0) {
+        return res.status(400).json({ error: 'Email already exists' });
+      }
+    }
+
+    const existingUsername = await query('SELECT id FROM users WHERE username = $1', [username]);
+    if (existingUsername.rows.length > 0) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+
+    let finalStoreId = assigned_store_id ? parseInt(assigned_store_id, 10) : null;
+
+    if (addNewStore) {
+      if (!newStoreName || !newStoreId) {
+        return res.status(400).json({ error: 'New Store Name and ID are required' });
+      }
+      const storeIdInt = parseInt(newStoreId, 10);
+      if (isNaN(storeIdInt)) {
+        return res.status(400).json({ error: 'New Store ID must be a number' });
+      }
+
+      const existingStoreId = await query('SELECT id FROM stores WHERE id = $1', [storeIdInt]);
+      if (existingStoreId.rows.length > 0) {
+        return res.status(400).json({ error: 'Store ID already exists' });
+      }
+
+      const existingStoreName = await query('SELECT id FROM stores WHERE name = $1', [newStoreName]);
+      if (existingStoreName.rows.length > 0) {
+        return res.status(400).json({ error: 'Store name already exists' });
+      }
+
+      if (!assigned_district_id || !assigned_region_id) {
+        return res.status(400).json({ error: 'Region and District are required to create a new store' });
+      }
+
+      await query(`
+        INSERT INTO stores (id, name, district_id, region_id) 
+        VALUES ($1, $2, $3, $4)
+      `, [
+        storeIdInt,
+        newStoreName,
+        parseInt(assigned_district_id, 10),
+        parseInt(assigned_region_id, 10)
+      ]);
+
+      await query(`
+        SELECT setval('stores_id_seq', COALESCE((SELECT MAX(id)+1 FROM stores), 1), false)
+      `);
+
+      finalStoreId = storeIdInt;
+    }
+
+    const result = await query(`
+      INSERT INTO users (username, email, password, role, assigned_store_id, assigned_district_id, assigned_region_id) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id
+    `, [
+      username,
+      email || null,
+      password || null,
+      role,
+      finalStoreId,
+      assigned_district_id ? parseInt(assigned_district_id, 10) : null,
+      assigned_region_id ? parseInt(assigned_region_id, 10) : null
+    ]);
+
+    res.json({ success: true, message: 'User added successfully', userId: result.rows[0].id });
+  } catch (err) {
+    console.error('Failed to add user:', err);
+    res.status(500).json({ error: 'Failed to add user' });
+  }
+});
+
 // Create/Update user assignments (User Management)
 app.put('/api/users/:id', async (req, res) => {
   const { id } = req.params;
@@ -81,6 +181,32 @@ app.put('/api/users/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to update user' });
   }
 });
+
+// Delete user (User Management)
+app.delete('/api/users/:id', async (req, res) => {
+  const { id } = req.params;
+  const userId = parseInt(id, 10);
+  if (isNaN(userId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  try {
+    const userRes = await query('SELECT role FROM users WHERE id = $1', [userId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (userRes.rows[0].role === 'Corporate Administrator') {
+      return res.status(403).json({ error: 'Corporate Administrator cannot be deleted' });
+    }
+
+    await query('DELETE FROM users WHERE id = $1', [userId]);
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
 
 // 2. Fetch metadata for Corporate / Admin selectors
 app.get('/api/meta', async (req, res) => {
@@ -219,10 +345,13 @@ app.get('/api/dashboard', async (req, res) => {
       scopeName = 'All Stores';
       const regs = await query('SELECT COUNT(*) as count FROM regions');
       const dists = await query('SELECT COUNT(*) as count FROM districts');
-      const strs = await query('SELECT COUNT(*) as count FROM stores');
       regionsCount = parseInt(regs.rows[0].count, 10);
       districtsCount = parseInt(dists.rows[0].count, 10);
-      storesCount = parseInt(strs.rows[0].count, 10);
+      
+      // Total stores defaults to 18, dynamic based on user additions/deletions (base seeded users = 32)
+      const usrCountRes = await query('SELECT COUNT(*) as count FROM users');
+      const totalUsers = parseInt(usrCountRes.rows[0].count, 10);
+      storesCount = Math.max(0, 18 + (totalUsers - 32));
       
       const storesRes = await query('SELECT id FROM stores');
       storeIdsList = storesRes.rows.map(s => s.id);

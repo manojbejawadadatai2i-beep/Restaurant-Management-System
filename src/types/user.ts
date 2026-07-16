@@ -8,4 +8,6 @@ export interface User {
   district_name: string | null;
   assigned_region_id: number | null;
   region_name: string | null;
+  email?: string | null;
+  password?: string | null;
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { Link } from 'react-router-dom';
 import { 
   Sun, 
   Moon, 
@@ -33,12 +34,12 @@ export const Navbar: React.FC = () => {
         <div className="flex-1 hidden md:block"></div>
 
         {/* Brand placeholder for small screens where sidebar is hidden/toggleable */}
-        <div className="flex md:hidden items-center gap-2">
+        <Link to="/" className="flex md:hidden items-center gap-2 hover:opacity-80 transition-opacity">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white">
             <span className="text-xs font-black">RP</span>
           </div>
           <span className="text-xs font-bold text-slate-850 dark:text-white">restaurant portal.</span>
-        </div>
+        </Link>
 
         {/* Right: Controls & Mock Authentication Swapper */}
         <div className="flex items-center space-x-4">

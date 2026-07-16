@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useRBAC } from '../../hooks/useRBAC';
 import { 
@@ -14,26 +14,28 @@ export const Sidebar: React.FC = () => {
   const { currentUser } = useAuth();
   const { hasPermission } = useRBAC();
 
+  const showDashboardTab = hasPermission('view:dashboard');
+  const showReportsTab = hasPermission('view:reports');
   const showUserTab = hasPermission('view:user-management');
   const showHealthTab = hasPermission('view:system-health');
 
   const menuItems = [
-    {
+    ...(showDashboardTab ? [{
       path: '/dashboard',
       label: 'Dashboard',
       icon: LayoutDashboard,
       color: 'text-blue-500',
       bgColor: 'bg-blue-50/60 dark:bg-blue-950/20',
       activeColor: 'text-blue-600 dark:text-blue-400 border-blue-500 bg-blue-50/40 dark:bg-blue-950/10'
-    },
-    {
+    }] : []),
+    ...(showReportsTab ? [{
       path: '/reports',
       label: 'Reports',
       icon: FileText,
       color: 'text-emerald-500',
       bgColor: 'bg-emerald-50/60 dark:bg-emerald-950/20',
       activeColor: 'text-emerald-600 dark:text-emerald-400 border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/10'
-    },
+    }] : []),
     ...(showUserTab ? [{
       path: '/users',
       label: 'User Access',
@@ -53,17 +55,17 @@ export const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-20 w-64 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800 flex flex-col justify-between transition-colors duration-200">
+    <aside className="fixed inset-y-0 left-0 z-20 w-20 hover:w-64 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800 flex flex-col justify-between transition-all duration-300 ease-in-out group shadow-sm">
       
       {/* Upper Section */}
       <div className="flex flex-col">
         {/* Brand Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-slate-50 dark:border-slate-800/50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+        <div className="h-16 flex items-center px-5 group-hover:px-6 transition-all duration-300 border-b border-slate-50 dark:border-slate-800/50">
+          <Link to="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 flex-shrink-0">
               <Utensils size={16} strokeWidth={2.5} />
             </div>
-            <div>
+            <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden flex items-center">
               <span className="text-base font-extrabold tracking-tight text-slate-850 dark:text-white">
                 restaurant
               </span>
@@ -71,12 +73,12 @@ export const Sidebar: React.FC = () => {
                 portal.
               </span>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* Menu Navigation */}
-        <nav className="p-4 space-y-1.5">
-          <div className="px-3 mb-2 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+        <nav className="p-3.5 group-hover:p-4 transition-all duration-300 space-y-1.5">
+          <div className="px-2.5 mb-2 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">
             Menu Navigation
           </div>
           {menuItems.map((item) => {
@@ -86,7 +88,7 @@ export const Sidebar: React.FC = () => {
                 key={item.path}
                 to={item.path}
                 className={({ isActive }) => 
-                  `w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold tracking-wide border-l-2 transition-all duration-200 ${
+                  `w-full flex items-center justify-start px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide border-l-2 transition-all duration-300 ${
                     isActive
                       ? `${item.activeColor}`
                       : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/40'
@@ -94,19 +96,19 @@ export const Sidebar: React.FC = () => {
                 }
               >
                 {({ isActive }) => (
-                  <>
+                  <div className="flex items-center justify-between w-full">
                     <div className="flex items-center gap-3">
-                      <div className={`p-1.5 rounded-lg transition-colors ${
+                      <div className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${
                         isActive ? `${item.bgColor} ${item.color}` : 'text-slate-400 dark:text-slate-500'
                       }`}>
                         <Icon size={16} />
                       </div>
-                      <span>{item.label}</span>
+                      <span className="opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">{item.label}</span>
                     </div>
                     {isActive && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-0 group-hover:opacity-100 transition-all duration-300 ml-auto flex-shrink-0"></span>
                     )}
-                  </>
+                  </div>
                 )}
               </NavLink>
             );
@@ -115,13 +117,13 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Lower Section / Account Profile info */}
-      <div className="p-4 border-t border-slate-50 dark:border-slate-800/50">
-        <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-3.5 flex flex-col gap-2">
+      <div className="p-3.5 group-hover:p-4 border-t border-slate-50 dark:border-slate-800/50 transition-all duration-300">
+        <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-2 group-hover:p-3.5 flex flex-col gap-2 transition-all duration-300">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs">
+            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs flex-shrink-0">
               {currentUser ? currentUser.username[0].toUpperCase() : 'U'}
             </div>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">
               <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate leading-none mb-1">
                 {currentUser ? currentUser.username : 'Loading...'}
               </p>
@@ -130,7 +132,7 @@ export const Sidebar: React.FC = () => {
               </p>
             </div>
           </div>
-          <div className="text-[10px] text-slate-450 dark:text-slate-500 bg-white dark:bg-slate-900 px-2 py-1 rounded-md border border-slate-100 dark:border-slate-800 font-medium truncate">
+          <div className="text-[10px] text-slate-450 dark:text-slate-500 bg-white dark:bg-slate-900 px-2 py-1 rounded-md border border-slate-100 dark:border-slate-800 font-medium truncate opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap overflow-hidden">
             Scope: {currentUser?.store_name || currentUser?.district_name || currentUser?.region_name || 'System-Wide'}
           </div>
         </div>

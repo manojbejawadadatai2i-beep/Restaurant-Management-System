@@ -1,6 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { ShieldAlert, ArrowLeft } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 
 export const Unauthorized: React.FC = () => {
   return (
@@ -11,15 +10,9 @@ export const Unauthorized: React.FC = () => {
       <h1 className="text-2xl font-black text-slate-850 dark:text-white tracking-tight mb-2">
         Access Restricted
       </h1>
-      <p className="text-sm text-slate-400 dark:text-slate-500 max-w-md leading-relaxed mb-8">
+      <p className="text-sm text-slate-400 dark:text-slate-500 max-w-md leading-relaxed">
         You do not have the required permissions to view this resource. If you believe this is an error, please contact the system administrator or switch to a higher access role.
       </p>
-      <Link
-        to="/dashboard"
-        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-800 text-white hover:bg-slate-800 dark:hover:bg-slate-700 font-semibold text-xs transition-all shadow-md active:scale-95"
-      >
-        <ArrowLeft size={14} /> Back to Dashboard
-      </Link>
     </div>
   );
 };

@@ -13,8 +13,7 @@ import {
   MapPin,
   Store,
   XCircle,
-  Sparkles,
-  AlertCircle
+  Sparkles
 } from 'lucide-react';
 import { 
   AreaChart,
@@ -144,7 +143,7 @@ export const DashboardLayout: React.FC = () => {
       }
     };
     fetchFilters();
-  }, []);
+  }, [currentUser]);
 
   // Primary TanStack Query: Fetch dashboard analytics with active filters and 3-second polling
   const { data, isLoading, isError } = useQuery<DashboardResponse>({
@@ -196,7 +195,7 @@ export const DashboardLayout: React.FC = () => {
     };
 
     fetchInsights();
-  }, [data]);
+  }, [data, currentUser]);
 
   // Reset dependent filters when parent changes
   const handleRegionChange = (val: string) => {
@@ -224,6 +223,8 @@ export const DashboardLayout: React.FC = () => {
         : stores;
 
   const showSelectors = hasPermission('view:scope-filters');
+
+
 
   if (isLoading) {
     return (
@@ -333,103 +334,103 @@ export const DashboardLayout: React.FC = () => {
       )}
 
       {/* 3. Summary Metrics Cards (Grid of 6) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         
         {/* Card 1: Total Orders */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-4.5 shadow-[0_8px_30px_rgb(0,0,0,0.015)] flex flex-col justify-between hover:translate-y-[-2px] transition-all duration-200">
-          <div className="flex justify-between items-start mb-3">
-            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-500">
-              <ShoppingBag size={16} />
+        <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.015)] flex flex-col justify-between hover:translate-y-[-2px] transition-all duration-200">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-500">
+              <ShoppingBag size={24} />
             </div>
-            <div className="flex items-center gap-0.5 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded-md">
-              <TrendingUp size={10} />
+            <div className="flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md">
+              <TrendingUp size={12} />
               <span>+12%</span>
             </div>
           </div>
           <div>
-            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Total Orders</span>
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight mt-1">{data.metrics.totalOrders}</h3>
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total Orders</span>
+            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{data.metrics.totalOrders}</h3>
           </div>
         </div>
 
         {/* Card 2: Total Revenue */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-4.5 shadow-[0_8px_30px_rgb(0,0,0,0.015)] flex flex-col justify-between hover:translate-y-[-2px] transition-all duration-200">
-          <div className="flex justify-between items-start mb-3">
-            <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-500">
-              <IndianRupee size={16} />
+        <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.015)] flex flex-col justify-between hover:translate-y-[-2px] transition-all duration-200">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-500">
+              <IndianRupee size={24} />
             </div>
-            <div className="flex items-center gap-0.5 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded-md">
-              <TrendingUp size={10} />
+            <div className="flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md">
+              <TrendingUp size={12} />
               <span>+8%</span>
             </div>
           </div>
           <div>
-            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Total Revenue</span>
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight mt-1">{formatCurrency(data.metrics.totalRevenue)}</h3>
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total Revenue</span>
+            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatCurrency(data.metrics.totalRevenue)}</h3>
           </div>
         </div>
 
         {/* Card 3: Total Expenses */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-4.5 shadow-[0_8px_30px_rgb(0,0,0,0.015)] flex flex-col justify-between hover:translate-y-[-2px] transition-all duration-200">
-          <div className="flex justify-between items-start mb-3">
-            <div className="p-2 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-400">
-              <ShoppingBag size={16} />
+        <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.015)] flex flex-col justify-between hover:translate-y-[-2px] transition-all duration-200">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-500">
+              <ShoppingBag size={24} />
             </div>
-            <div className="flex items-center gap-0.5 text-[9px] font-bold text-red-600 dark:text-red-400 bg-red-50/70 dark:bg-red-950/40 px-1.5 py-0.5 rounded-md">
+            <div className="flex items-center gap-1 text-xs font-bold text-red-600 dark:text-red-400 bg-red-50/70 dark:bg-red-950/40 px-2.5 py-1 rounded-md">
               <span>Cost</span>
             </div>
           </div>
           <div>
-            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Total Expenses</span>
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight mt-1">{formatCurrency(data.metrics.totalCost)}</h3>
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total Expenses</span>
+            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatCurrency(data.metrics.totalCost)}</h3>
           </div>
         </div>
 
         {/* Card 4: Net Profit */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-4.5 shadow-[0_8px_30px_rgb(0,0,0,0.015)] flex flex-col justify-between hover:translate-y-[-2px] transition-all duration-200">
-          <div className="flex justify-between items-start mb-3">
-            <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-500">
-              <TrendingUp size={16} />
+        <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.015)] flex flex-col justify-between hover:translate-y-[-2px] transition-all duration-200">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-500">
+              <TrendingUp size={24} />
             </div>
-            <div className="flex items-center gap-0.5 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded-md">
+            <div className="flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md">
               <span>{data.metrics.profitMargin}% Margin</span>
             </div>
           </div>
           <div>
-            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Net Profit</span>
-            <h3 className="text-xl font-bold text-slate-850 dark:text-white tracking-tight mt-1">{formatCurrency(data.metrics.totalProfit)}</h3>
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Net Profit</span>
+            <h3 className="text-3xl font-extrabold text-slate-850 dark:text-white tracking-tight mt-2">{formatCurrency(data.metrics.totalProfit)}</h3>
           </div>
         </div>
 
         {/* Card 5: Average Order Value (AOV) */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-4.5 shadow-[0_8px_30px_rgb(0,0,0,0.015)] flex flex-col justify-between hover:translate-y-[-2px] transition-all duration-200">
-          <div className="flex justify-between items-start mb-3">
-            <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 text-amber-500">
-              <TrendingUp size={16} />
+        <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.015)] flex flex-col justify-between hover:translate-y-[-2px] transition-all duration-200">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 text-amber-500">
+              <TrendingUp size={24} />
             </div>
-            <div className="flex items-center gap-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50/70 dark:bg-amber-950/40 px-1.5 py-0.5 rounded-md">
+            <div className="flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50/70 dark:bg-amber-950/40 px-2.5 py-1 rounded-md">
               <span>AOV</span>
             </div>
           </div>
           <div>
-            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Avg Order Value</span>
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight mt-1">{formatCurrency(data.metrics.avgOrderValue)}</h3>
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Avg Order Value</span>
+            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatCurrency(data.metrics.avgOrderValue)}</h3>
           </div>
         </div>
 
         {/* Card 6: Cancellation Rate */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-4.5 shadow-[0_8px_30px_rgb(0,0,0,0.015)] flex flex-col justify-between hover:translate-y-[-2px] transition-all duration-200">
-          <div className="flex justify-between items-start mb-3">
-            <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-500">
-              <XCircle size={16} />
+        <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.015)] flex flex-col justify-between hover:translate-y-[-2px] transition-all duration-200">
+          <div className="flex justify-between items-start mb-4">
+            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-500">
+              <XCircle size={24} />
             </div>
-            <div className="flex items-center gap-0.5 text-[9px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50/70 dark:bg-rose-950/40 px-1.5 py-0.5 rounded-md">
+            <div className="flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50/70 dark:bg-rose-950/40 px-2.5 py-1 rounded-md">
               <span>Rate</span>
             </div>
           </div>
           <div>
-            <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Cancellation Rate</span>
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight mt-1">{data.metrics.cancellationRate}%</h3>
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Cancellation Rate</span>
+            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{data.metrics.cancellationRate}%</h3>
           </div>
         </div>
 
@@ -675,130 +676,87 @@ export const DashboardLayout: React.FC = () => {
         </div>
       </div>
 
-      {/* 6. Bottom Section: AI Insights & Exception Reports */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column: AI Insights Summary Table */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-[0_8px_30px_rgb(0,0,0,0.015)]">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-4 bg-violet-500 rounded-full"></span>
-              <h2 className="text-xs font-bold text-slate-855 dark:text-white uppercase tracking-widest flex items-center gap-2">
-                <Sparkles size={14} className="text-violet-500" /> AI Insights Summary
-              </h2>
-            </div>
-            <span className="text-[9px] font-bold text-violet-500 bg-violet-50 dark:bg-violet-950/20 px-2 py-0.5 rounded-md">
-              {aiInsights ? '5' : '0'} Insights
-            </span>
+      {/* 6. Bottom Section: AI Insights */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-[0_8px_30px_rgb(0,0,0,0.015)]">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-4 bg-violet-500 rounded-full"></span>
+            <h2 className="text-xs font-bold text-slate-855 dark:text-white uppercase tracking-widest flex items-center gap-2">
+              <Sparkles size={14} className="text-violet-500" /> AI Insights Summary
+            </h2>
           </div>
+          <span className="text-[9px] font-bold text-violet-500 bg-violet-50 dark:bg-violet-950/20 px-2 py-0.5 rounded-md">
+            {aiInsights ? '5' : '0'} Insights
+          </span>
+        </div>
 
-          <div className="mt-2 space-y-4">
-            {aiLoading ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="mt-3 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest animate-pulse">AI Agent analyzing metrics...</p>
-              </div>
-            ) : aiError ? (
-              <div className="bg-slate-50/50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 rounded-xl p-4 text-center">
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  AI Agent Service is not running on port 8000.
+        <div className="mt-2 space-y-4">
+          {aiLoading ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="mt-3 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest animate-pulse">AI Agent analyzing metrics...</p>
+            </div>
+          ) : aiError ? (
+            <div className="bg-slate-50/50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 rounded-xl p-4 text-center">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                AI Agent Service is not running on port 8000.
+              </p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 max-w-xs mx-auto">
+                Once your friend starts the FastAPI service, this dashboard will automatically load live AI Insights here.
+              </p>
+            </div>
+          ) : aiInsights ? (
+            <div className="space-y-3.5">
+              {/* Executive Summary */}
+              <div className="p-3.5 rounded-xl bg-violet-50/40 dark:bg-violet-950/10 border border-violet-100/50 dark:border-violet-900/20">
+                <h4 className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400 mb-1">Executive Summary</h4>
+                <p className="text-xs text-slate-700 dark:text-slate-350 leading-relaxed font-medium">
+                  {aiInsights.executive_summary}
                 </p>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 max-w-xs mx-auto">
-                  Once your friend starts the FastAPI service, this dashboard will automatically load live AI Insights here.
-                </p>
               </div>
-            ) : aiInsights ? (
-              <div className="space-y-3.5">
-                {/* Executive Summary */}
-                <div className="p-3.5 rounded-xl bg-violet-50/40 dark:bg-violet-950/10 border border-violet-100/50 dark:border-violet-900/20">
-                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400 mb-1">Executive Summary</h4>
-                  <p className="text-xs text-slate-700 dark:text-slate-350 leading-relaxed font-medium">
-                    {aiInsights.executive_summary}
+
+              {/* Key Insights & Recommendations Split */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                <div className="p-3.5 rounded-xl bg-slate-50/50 dark:bg-slate-950/30 border border-slate-105 dark:border-slate-800/80">
+                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Key Insights</h4>
+                  <p className="text-xs text-slate-650 dark:text-slate-350 leading-relaxed font-medium">
+                    {aiInsights.key_business_insights}
+                  </p>
+                </div>
+                
+                <div className="p-3.5 rounded-xl bg-emerald-50/30 dark:bg-emerald-950/10 border border-emerald-100/50 dark:border-emerald-900/20">
+                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1.5">Recommendations</h4>
+                  <p className="text-xs text-slate-650 dark:text-emerald-350 leading-relaxed font-medium">
+                    {aiInsights.business_recommendations}
+                  </p>
+                </div>
+              </div>
+
+              {/* Alerts & Possible Reasons */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                <div className="p-3.5 rounded-xl bg-amber-50/30 dark:bg-amber-950/10 border border-amber-100/50 dark:border-amber-900/20">
+                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5">Alerts</h4>
+                  <p className="text-xs text-slate-650 dark:text-amber-350 leading-relaxed font-medium">
+                    {aiInsights.alerts}
                   </p>
                 </div>
 
-                {/* Key Insights & Recommendations Split */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  <div className="p-3.5 rounded-xl bg-slate-50/50 dark:bg-slate-950/30 border border-slate-105 dark:border-slate-800/80">
-                    <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Key Insights</h4>
-                    <p className="text-xs text-slate-650 dark:text-slate-350 leading-relaxed font-medium">
-                      {aiInsights.key_business_insights}
-                    </p>
-                  </div>
-                  
-                  <div className="p-3.5 rounded-xl bg-emerald-50/30 dark:bg-emerald-950/10 border border-emerald-100/50 dark:border-emerald-900/20">
-                    <h4 className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1.5">Recommendations</h4>
-                    <p className="text-xs text-slate-650 dark:text-emerald-350 leading-relaxed font-medium">
-                      {aiInsights.business_recommendations}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Alerts & Possible Reasons */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  <div className="p-3.5 rounded-xl bg-amber-50/30 dark:bg-amber-950/10 border border-amber-100/50 dark:border-amber-900/20">
-                    <h4 className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5">Alerts</h4>
-                    <p className="text-xs text-slate-650 dark:text-amber-350 leading-relaxed font-medium">
-                      {aiInsights.alerts}
-                    </p>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-slate-50/50 dark:bg-slate-950/30 border border-slate-105 dark:border-slate-800/80">
-                    <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Possible Reasons</h4>
-                    <p className="text-xs text-slate-650 dark:text-slate-350 leading-relaxed font-medium">
-                      {aiInsights.possible_reasons}
-                    </p>
-                  </div>
+                <div className="p-3.5 rounded-xl bg-slate-50/50 dark:bg-slate-950/30 border border-slate-105 dark:border-slate-800/80">
+                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Possible Reasons</h4>
+                  <p className="text-xs text-slate-650 dark:text-slate-350 leading-relaxed font-medium">
+                    {aiInsights.possible_reasons}
+                  </p>
                 </div>
               </div>
-            ) : (
-              <div className="bg-slate-50/50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 rounded-xl py-12 text-center text-slate-400 dark:text-slate-500">
-                <span className="text-xs font-bold uppercase tracking-widest text-slate-450 dark:text-slate-400">No Insights yet</span>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 max-w-xs mx-auto">
-                  Metrics data must be available to generate real-time AI Insights.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Column: Exception Reports Table */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-100/80 dark:border-slate-800/80 rounded-2xl p-5 shadow-[0_8px_30px_rgb(0,0,0,0.015)]">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-4 bg-rose-500 rounded-full"></span>
-              <h2 className="text-xs font-bold text-slate-855 dark:text-white uppercase tracking-widest flex items-center gap-2">
-                <AlertCircle size={14} className="text-rose-500" /> Exception Reports
-              </h2>
             </div>
-            <span className="text-[9px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-950/20 px-2 py-0.5 rounded-md">
-              0 Exceptions
-            </span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800/60 text-slate-400 font-bold uppercase tracking-wider pb-2 text-[9px]">
-                  <th className="py-2.5 font-bold">Report ID</th>
-                  <th className="py-2.5 font-bold">Incident Type</th>
-                  <th className="py-2.5 font-bold text-center">Severity</th>
-                  <th className="py-2.5 font-bold text-right">Triggered At</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td colSpan={4} className="py-12 text-center text-slate-400 dark:text-slate-500">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <span className="text-xs font-bold uppercase tracking-widest text-slate-450 dark:text-slate-400">No Reports in that</span>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500 max-w-sm font-medium">
-                        AI exception reports will display here once generated.
-                      </p>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          ) : (
+            <div className="bg-slate-50/50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 rounded-xl py-12 text-center text-slate-400 dark:text-slate-500">
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-450 dark:text-slate-400">No Insights yet</span>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 max-w-xs mx-auto">
+                Metrics data must be available to generate real-time AI Insights.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

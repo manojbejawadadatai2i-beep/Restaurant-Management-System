@@ -8,9 +8,11 @@ export interface RouteItem {
 export const routeConfig: Record<string, RouteItem> = {
   dashboard: {
     path: '/dashboard',
+    permission: 'view:dashboard',
   },
   reports: {
     path: '/reports',
+    permission: 'view:reports',
   },
   users: {
     path: '/users',

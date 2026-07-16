@@ -11,18 +11,33 @@ import { SiteHealth } from '../pages/settings/SiteHealth';
 import { Unauthorized } from '../pages/unauthorized/Unauthorized';
 import { NotFound } from '../pages/not-found/NotFound';
 
+import { useRBAC } from '../hooks/useRBAC';
+
+const RootRedirect: React.FC = () => {
+  const { hasPermission } = useRBAC();
+  if (hasPermission('view:dashboard')) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  if (hasPermission('view:user-management')) {
+    return <Navigate to="/users" replace />;
+  }
+  return <Navigate to="/unauthorized" replace />;
+};
+
 export const AppRoutes: React.FC = () => {
   return (
     <Routes>
-      {/* Root redirects to /dashboard */}
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      {/* Root redirects dynamically based on permissions */}
+      <Route path="/" element={<ProtectedRoute><RootRedirect /></ProtectedRoute>} />
 
       {/* Protected Routes */}
       <Route
         path={routeConfig.dashboard.path}
         element={
           <ProtectedRoute>
-            <DashboardLayout />
+            <RoleRoute permission={routeConfig.dashboard.permission}>
+              <DashboardLayout />
+            </RoleRoute>
           </ProtectedRoute>
         }
       />
@@ -30,7 +45,9 @@ export const AppRoutes: React.FC = () => {
         path={routeConfig.reports.path}
         element={
           <ProtectedRoute>
-            <Reports />
+            <RoleRoute permission={routeConfig.reports.permission}>
+              <Reports />
+            </RoleRoute>
           </ProtectedRoute>
         }
       />
