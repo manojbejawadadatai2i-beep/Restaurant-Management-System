@@ -1,27 +1,45 @@
 import uvicorn
+import logging
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 from Api.ai_insights import router as insights_router
+from Api.chat import router as chat_router
+from Api.auth import router as auth_router
+from Api.health import router as health_router
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="AI Agent Service",
-    description="AI Agent for generating business insights using Groq Llama-3.3",
+    title="Restaurant Decision Support Chatbot Service",
+    description="Backend API for the Restaurant DSS Chatbot & AI Insights Module.",
     version="1.0.0"
 )
 
-# Register router
+# Enable CORS for frontend integration (React Dashboard)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Adjust in production as needed
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Register routers
 app.include_router(insights_router)
+app.include_router(chat_router)
+app.include_router(auth_router)
+app.include_router(health_router)
 
 @app.get("/")
-def root():
+def read_root():
     return {
-        "message": "AI Agent Service is running successfully!"
-    }
-
-@app.get("/health")
-def health_check():
-    return {
-        "status": "success",
-        "message": "AI Agent is running successfully."
+        "message": "Welcome to the Restaurant Decision Support Chatbot API",
+        "health_check": "/health"
     }
 
 if __name__ == "__main__":
