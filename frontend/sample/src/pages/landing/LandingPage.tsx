@@ -70,7 +70,8 @@ export const LandingPage: React.FC = () => {
         await loginGoogle(idToken);
         setDrawerOpen(false);
       } catch (err: any) {
-        setErrorMsg(err.response?.data?.detail || 'Google authentication failed. Is the user registered in PostgreSQL?');
+        const serverMsg = err.response?.data?.error || err.response?.data?.detail;
+        setErrorMsg(serverMsg || 'Google authentication failed. Is your email registered in the system?');
       } finally {
         setLoginLoading(false);
       }

@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { pool } from './db.js';
+import { OAuth2Client } from 'google-auth-library';
 
 dotenv.config();
 
@@ -80,10 +81,22 @@ const handleLogin = async (req, res) => {
     const cleanUser = user.username.replace(/[^a-zA-Z0-9]/g, '');
     const schemaPass = (cleanUser.slice(0, 4) || 'user').toLowerCase() + '@123';
 
-    const isDefaultPassword = 
-      password === 'password123' || 
-      password === schemaPass || 
-      user.requires_password_change === true || 
+    // --- Password Validation ---
+    // Accepted passwords: stored DB password, the schema default (first4chars@123), or 'password123'
+    const isValidPassword =
+      password === user.password ||
+      password === schemaPass ||
+      password === 'password123';
+
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid email/username or password' });
+    }
+
+    // Flag if user is still on a default / first-login password
+    const isDefaultPassword =
+      password === schemaPass ||
+      password === 'password123' ||
+      user.requires_password_change === true ||
       user.is_new_user === true;
 
     const token = `token_emp_${user.id}_${Date.now()}`;
@@ -141,21 +154,65 @@ app.post('/api/change-password', async (req, res) => {
   }
 });
 
+const GOOGLE_CLIENT_ID = process.env.VITE_GOOGLE_CLIENT_ID || '';
+const googleOAuthClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+
 const handleGoogleLogin = async (req, res) => {
+  const { id_token } = req.body;
+
+  if (!id_token) {
+    return res.status(400).json({ error: 'Google ID token is required' });
+  }
+
+  // 1. Verify the token is a real Google-signed JWT
+  let googleEmail = null;
+  let googleName = null;
   try {
+    const ticket = await googleOAuthClient.verifyIdToken({
+      idToken: id_token,
+      audience: GOOGLE_CLIENT_ID
+    });
+    const payload = ticket.getPayload();
+    googleEmail = payload?.email?.toLowerCase();
+    googleName = payload?.name;
+  } catch (verifyErr) {
+    console.error('Google token verification failed:', verifyErr.message);
+    return res.status(401).json({ error: 'Invalid Google token. Verification failed.' });
+  }
+
+  if (!googleEmail) {
+    return res.status(401).json({ error: 'Could not extract email from Google token.' });
+  }
+
+  try {
+    // 2. Look up the user in the database by their Google-verified email
     const result = await query(`
-      SELECT u.id, u.username, u.email, u.role, 
-             u.assigned_store_id, s.name as store_name,
-             u.assigned_district_id, d.name as district_name,
-             u.assigned_region_id, r.name as region_name
+      SELECT u.id, u.username, u.email, u.role,
+             u.assigned_store_id,
+             COALESCE(s.name, '') as store_name,
+             COALESCE(u.assigned_district_id, s.district_id) as assigned_district_id,
+             COALESCE(d.name, sd.name) as district_name,
+             COALESCE(u.assigned_region_id, s.region_id, sd.region_id) as assigned_region_id,
+             COALESCE(r.name, sr.name, sdr.name) as region_name
       FROM users u
       LEFT JOIN stores s ON u.assigned_store_id = s.id
       LEFT JOIN districts d ON u.assigned_district_id = d.id
+      LEFT JOIN districts sd ON s.district_id = sd.id
       LEFT JOIN regions r ON u.assigned_region_id = r.id
-      ORDER BY u.id ASC LIMIT 1
-    `);
+      LEFT JOIN regions sr ON s.region_id = sr.id
+      LEFT JOIN regions sdr ON sd.region_id = sdr.id
+      WHERE LOWER(u.email) = $1
+    `, [googleEmail]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: `No account found for Google email: ${googleEmail}. Please contact your administrator to register this email.`
+      });
+    }
+
     const user = result.rows[0];
     const token = `google_token_${user.id}_${Date.now()}`;
+
     res.json({
       message: 'Google login successful',
       access_token: token,
@@ -176,7 +233,8 @@ const handleGoogleLogin = async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ error: 'Google login error' });
+    console.error('Google login DB error:', err);
+    res.status(500).json({ error: 'Internal server error during Google login' });
   }
 };
 
@@ -185,18 +243,28 @@ app.post('/api/login', handleLogin);
 app.post('/login/google', handleGoogleLogin);
 app.post('/api/login/google', handleGoogleLogin);
 
-// 2. Get all users for mock login / role switcher
+// 2. Get all users with fully resolved scope hierarchy (store -> district -> region)
 app.get('/api/users', async (req, res) => {
   try {
     const result = await query(`
-      SELECT u.id, u.username, u.role, 
-             u.assigned_store_id, s.name as store_name,
-             u.assigned_district_id, d.name as district_name,
-             u.assigned_region_id, r.name as region_name
+      SELECT 
+        u.id,
+        u.username,
+        u.email,
+        u.role,
+        u.assigned_store_id,
+        COALESCE(s.name, '') as store_name,
+        COALESCE(u.assigned_district_id, s.district_id) as assigned_district_id,
+        COALESCE(d.name, sd.name) as district_name,
+        COALESCE(u.assigned_region_id, s.region_id, sd.region_id) as assigned_region_id,
+        COALESCE(r.name, sr.name, sdr.name) as region_name
       FROM users u
       LEFT JOIN stores s ON u.assigned_store_id = s.id
       LEFT JOIN districts d ON u.assigned_district_id = d.id
+      LEFT JOIN districts sd ON s.district_id = sd.id
       LEFT JOIN regions r ON u.assigned_region_id = r.id
+      LEFT JOIN regions sr ON s.region_id = sr.id
+      LEFT JOIN regions sdr ON sd.region_id = sdr.id
       ORDER BY u.id ASC
     `);
     res.json(result.rows);
@@ -1447,12 +1515,7 @@ app.post('/api/kpi/aggregate', async (req, res) => {
   }
 });
 
-app.listen(PORT, '127.0.0.1', async () => {
-  console.log(`Express server running on http://127.0.0.1:${PORT}`);
-  try {
-    await aggregateAllKpis();
-    console.log('✓ Initial cascading KPI aggregation completed on server startup.');
-  } catch (e) {
-    console.warn('Initial KPI aggregation notice:', e.message);
-  }
+app.listen(PORT, '127.0.0.1', () => {
+  console.log(`✓ Express API server running → http://127.0.0.1:${PORT}`);
+  console.log(`  KPI aggregation: POST /api/kpi/aggregate  (run manually or via scheduler)`);
 });
