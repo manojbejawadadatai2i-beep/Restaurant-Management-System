@@ -172,3 +172,32 @@ class GeneratedReport(Base):
 
 # Alias for compatibility with the Chatbot codebase
 DailyStoreKPI = KPI
+
+class MenuItem(Base):
+    __tablename__ = 'menu_items'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False, unique=True)
+    price = Column(Numeric(10, 2), nullable=False)
+    cost = Column(Numeric(10, 2), nullable=False)
+    category = Column(String(100), nullable=False)
+
+class Order(Base):
+    __tablename__ = 'orders'
+    
+    id = Column(Integer, primary_key=True)
+    store_id = Column(Integer, ForeignKey('stores.id'), nullable=False)
+    customer_name = Column(String(100), nullable=False)
+    total_amount = Column(Numeric(10, 2), nullable=False)
+    status = Column(String(50), nullable=False)
+    created_at = Column(DateTime, nullable=False)
+
+class OrderItem(Base):
+    __tablename__ = 'order_items'
+    
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey('orders.id'), nullable=False)
+    menu_item_id = Column(Integer, ForeignKey('menu_items.id'), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    price = Column(Numeric(10, 2), nullable=False)
+

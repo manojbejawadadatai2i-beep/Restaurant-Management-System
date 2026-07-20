@@ -1,37 +1,39 @@
+import time
+import os
+import psutil
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from dependencies import get_db
-from Services.llm_service import llm_service
-from schemas import HealthResponse
 
-router = APIRouter(prefix="/health", tags=["health"])
+router = APIRouter(prefix="/api/health", tags=["health"])
 
-@router.get("", response_model=HealthResponse)
-def get_health():
-    """Verify chatbot API is up and running."""
-    return {"status": "ok", "details": {"version": "1.0.0"}}
+# Store startup time to calculate uptime
+START_TIME = time.time()
 
-@router.get("/database", response_model=HealthResponse)
-def get_database_health(db: Session = Depends(get_db)):
-    """Check database health by running a simple query."""
+@router.get("")
+def get_system_health(db: Session = Depends(get_db)):
+    """Check system health, database connectivity, and resource usage."""
+    db_status = "Disconnected"
     try:
         db.execute(text("SELECT 1"))
-        return {"status": "ok", "details": {"connection": "healthy"}}
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Database is unreachable: {str(exc)}"
-        )
+        db_status = "Connected"
+    except Exception:
+        pass
 
-@router.get("/llm", response_model=HealthResponse)
-def get_llm_health():
-    """Verify Groq LLM API connectivity and model status."""
-    is_healthy = llm_service.test_connection()
-    if is_healthy:
-        return {"status": "ok", "details": {"llm_provider": "Groq", "status": "connected"}}
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="LLM service is unreachable or returned an error."
-        )
+    # Fetch CPU/memory metrics using psutil
+    process = psutil.Process(os.getpid())
+    rss_val = process.memory_info().rss
+    heap_total = psutil.virtual_memory().total
+    heap_used = psutil.virtual_memory().used
+
+    return {
+        "status": "Healthy" if db_status == "Connected" else "Unhealthy",
+        "database": db_status,
+        "uptime": time.time() - START_TIME,
+        "memory": {
+            "rss": f"{round(rss_val / 1024 / 1024)} MB",
+            "heapTotal": f"{round(heap_total / 1024 / 1024)} MB",
+            "heapUsed": f"{round(heap_used / 1024 / 1024)} MB"
+        }
+    }

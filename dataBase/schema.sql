@@ -339,3 +339,42 @@ CREATE INDEX IF NOT EXISTS idx_reports_user ON generated_reports(generated_by);
 CREATE INDEX IF NOT EXISTS idx_reports_date ON generated_reports(report_date);
 CREATE INDEX IF NOT EXISTS idx_reports_type ON generated_reports(report_type);
 CREATE INDEX IF NOT EXISTS idx_reports_store ON generated_reports(store_id);
+
+-- ----------------------------------------------------------------------------
+-- 12. menu_items
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS menu_items (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    price NUMERIC(10, 2) NOT NULL,
+    cost NUMERIC(10, 2) NOT NULL,
+    category VARCHAR(100) NOT NULL
+);
+
+-- ----------------------------------------------------------------------------
+-- 13. orders
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS orders (
+    id SERIAL PRIMARY KEY,
+    store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    customer_name VARCHAR(100) NOT NULL,
+    total_amount NUMERIC(10, 2) NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ----------------------------------------------------------------------------
+-- 14. order_items
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS order_items (
+    id SERIAL PRIMARY KEY,
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    menu_item_id INTEGER NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
+    quantity INTEGER NOT NULL,
+    price NUMERIC(10, 2) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_store ON orders(store_id);
+CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at);
+CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+
