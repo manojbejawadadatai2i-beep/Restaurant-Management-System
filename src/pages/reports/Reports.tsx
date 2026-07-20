@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
-import { useAuth } from '../../context/AuthContext';
+import api from '../../utils/axios';
+import { useAuth } from '../../hooks/useAuth';
 import { 
   FileText, 
   Download, 
-  Search, 
-  AlertCircle
+  Search
 } from 'lucide-react';
+import { Card, CardHeader, CardTitle } from '../../components/ui/Card';
+import { Input } from '../../components/ui/Input';
+import { Button } from '../../components/ui/Button';
+import { Alert } from '../../components/ui/Alert';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/Table';
+import { formatCurrency } from '../../utils/format';
 
 interface StoreReportItem {
   id: number;
@@ -31,23 +36,14 @@ export const Reports: React.FC = () => {
   } = useQuery<StoreReportItem[]>({
     queryKey: ['reportStore', currentUser?.id],
     queryFn: async () => {
-      const res = await axios.get('http://127.0.0.1:5001/api/reports/sales-by-store', {
+      const res = await api.get('/api/reports/sales-by-store', {
         params: { userId: currentUser?.id }
       });
       return res.data;
     },
     enabled: !!currentUser,
-    refetchInterval: 3000
+    refetchInterval: 30000
   });
-
-  const formatCurrency = (val: string | number) => {
-    const num = typeof val === 'string' ? parseFloat(val) : val;
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 2
-    }).format(num);
-  };
 
   const handleExportCSV = () => {
     if (!storeData) return;
@@ -76,106 +72,103 @@ export const Reports: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  const filteredStoreData = storeData
+    ? storeData.filter(item => 
+        item.store_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.district_name && item.district_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.region_name && item.region_name.toLowerCase().includes(searchTerm.toLowerCase()))
+      )
+    : [];
+
   return (
     <div className="space-y-6">
-      {/* 1. Header with Search */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm transition-colors">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 flex items-center justify-center">
-            <FileText size={20} />
+      {/* 1. Header Card */}
+      <Card>
+        <CardHeader className="border-b-0 pb-0 mb-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-500/10 dark:bg-orange-500/20 text-orange-500 flex items-center justify-center">
+              <FileText size={20} />
+            </div>
+            <div>
+              <CardTitle>Reports Register</CardTitle>
+              <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-0.5">Query and export live data aggregates from PostgreSQL</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Reports Register</h2>
-            <p className="text-xs text-slate-550 dark:text-slate-400">Query and export live data aggregates from PostgreSQL</p>
-          </div>
-        </div>
-      </div>
+        </CardHeader>
+      </Card>
 
       {/* 2. Search and Download Action Bar */}
       <div className="flex flex-col sm:flex-row items-center gap-4 bg-white dark:bg-slate-900/60 p-4 border border-slate-200 dark:border-slate-800/80 rounded-2xl shadow-sm">
         <div className="relative w-full sm:flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={16} />
-          <input
+          <Input
             type="text"
             placeholder="Search store, district, or region..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500/50 focus:border-orange-500 transition-all placeholder-slate-400 dark:placeholder-slate-500"
+            leftIcon={<Search size={16} />}
           />
         </div>
         
-        <button
+        <Button
           onClick={handleExportCSV}
           disabled={isLoading || isError}
-          className="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-900 dark:bg-slate-800 text-white hover:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold flex items-center justify-center gap-2 active:scale-98 transition-all border border-slate-850 shadow-md"
+          leftIcon={<Download size={15} />}
+          className="w-full sm:w-auto"
         >
-          <Download size={15} /> Export CSV
-        </button>
+          Export CSV
+        </Button>
       </div>
 
       {/* 3. Table Container */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-md transition-colors">
+      <div>
         {isLoading && (
-          <div className="flex flex-col items-center justify-center py-20 bg-slate-50/20 dark:bg-slate-950/5">
+          <div className="flex flex-col items-center justify-center py-20">
             <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="mt-4 text-xs font-semibold text-slate-500 dark:text-slate-450">Loading Postgres Report data...</p>
+            <p className="mt-4 text-xs font-semibold text-slate-500 dark:text-slate-450 uppercase tracking-wider">Loading Postgres Report data...</p>
           </div>
         )}
 
         {isError && (
-          <div className="p-8 text-center bg-red-50/50 dark:bg-red-950/10 flex flex-col items-center justify-center">
-            <AlertCircle className="text-red-500 mb-2" size={32} />
-            <h4 className="text-sm font-bold text-red-800 dark:text-red-400">Failed to Retrieve Report</h4>
-            <p className="text-xs text-red-650 dark:text-red-300 mt-1">
-              Verify backend connectivity. Ensure tables are seeded and PORT is active.
-            </p>
-          </div>
+          <Alert variant="error" title="Failed to Retrieve Report">
+            Verify backend connectivity. Ensure tables are seeded and PORT is active.
+          </Alert>
         )}
 
         {!isLoading && !isError && (
-          <div className="overflow-x-auto">
-            {/* Store Performance Report */}
-            {storeData && (
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
-                    <th className="px-6 py-4 text-xs font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider">Store ID</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider">Store Name</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider">District</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider text-center">Total Orders</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider text-right">Avg Order Value</th>
-                    <th className="px-6 py-4 text-xs font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider text-right">Total Revenue</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  {storeData
-                    .filter(item => 
-                      item.store_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      (item.district_name && item.district_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                      (item.region_name && item.region_name.toLowerCase().includes(searchTerm.toLowerCase()))
-                    )
-                    .map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                        <td className="px-6 py-4 text-sm font-semibold text-slate-500 dark:text-slate-400">#{item.id}</td>
-                        <td className="px-6 py-4 text-sm font-bold text-slate-900 dark:text-white">{item.store_name}</td>
-                        <td className="px-6 py-4 text-sm text-slate-550 dark:text-slate-400">
-                          <span className="block font-medium">{item.district_name || 'N/A'}</span>
-                          <span className="text-[10px] text-slate-400 dark:text-slate-550 block">{item.region_name || 'N/A'}</span>
-                        </td>
-                        <td className="px-6 py-4 text-sm font-medium text-slate-700 dark:text-slate-350 text-center">{item.total_orders}</td>
-                        <td className="px-6 py-4 text-sm font-semibold text-slate-750 dark:text-slate-355 text-right">{formatCurrency(item.avg_order_value)}</td>
-                        <td className="px-6 py-4 text-sm font-bold text-orange-600 dark:text-orange-400 text-right">{formatCurrency(item.total_revenue)}</td>
-                      </tr>
-                    ))}
-                  {storeData.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="text-center py-10 text-sm text-slate-400">No stores found.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            )}
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Store ID</TableHead>
+                <TableHead>Store Name</TableHead>
+                <TableHead>District</TableHead>
+                <TableHead className="text-center">Total Orders</TableHead>
+                <TableHead className="text-right">Avg Order Value</TableHead>
+                <TableHead className="text-right">Total Revenue</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredStoreData.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell className="font-semibold text-slate-500 dark:text-slate-400">#{item.id}</TableCell>
+                  <TableCell className="font-bold text-slate-900 dark:text-white">{item.store_name}</TableCell>
+                  <TableCell>
+                    <div>
+                      <p className="font-semibold">{item.district_name || 'N/A'}</p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-550 block">{item.region_name || 'N/A'}</p>
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-medium text-center">{item.total_orders}</TableCell>
+                  <TableCell className="font-semibold text-right">{formatCurrency(parseFloat(item.avg_order_value))}</TableCell>
+                  <TableCell className="font-bold text-orange-600 dark:text-orange-400 text-right">{formatCurrency(parseFloat(item.total_revenue))}</TableCell>
+                </TableRow>
+              ))}
+              {filteredStoreData.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-10 text-slate-400 font-semibold">No stores found.</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         )}
       </div>
     </div>

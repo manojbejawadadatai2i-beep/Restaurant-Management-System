@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
-import type { User } from '../types/user';
+import React, { createContext, useState, useEffect } from 'react';
+import axios from '../utils/axios';
+import type { User } from '../types';
 
 interface AuthContextType {
   users: User[];
@@ -10,7 +10,7 @@ interface AuthContextType {
   refreshUsers: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>([]);
@@ -19,7 +19,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchUsers = async () => {
     try {
-      const response = await axios.get('http://127.0.0.1:5001/api/users');
+      const response = await axios.get('/api/users');
       setUsers(response.data);
       
       // Default to corporate_admin for demo/wide access, or preserve existing active user
@@ -57,10 +57,3 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};

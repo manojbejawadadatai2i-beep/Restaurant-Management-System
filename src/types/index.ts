@@ -1,3 +1,17 @@
+export interface User {
+  id: number;
+  username: string;
+  role: string;
+  assigned_store_id: number | null;
+  store_name: string | null;
+  assigned_district_id: number | null;
+  district_name: string | null;
+  assigned_region_id: number | null;
+  region_name: string | null;
+  email?: string | null;
+  password?: string | null;
+}
+
 export interface DBRegion {
   id: number;
   name: string;
@@ -64,7 +78,7 @@ export interface DashboardMetrics {
 
 // Revenue Trend structure for Recharts Line Chart
 export interface RevenueTrendPoint {
-  name: 'Mon' | 'Wed' | 'Thu';
+  name: string;
   revenue: number;
   profit: number;
 }
@@ -119,3 +133,26 @@ export interface DashboardResponse {
   topSelling: TopSellingItem[];
   recentOrders: RecentOrderRow[];
 }
+
+// Role and Permission definitions
+export type UserRole = 
+  | 'Corporate Administrator'
+  | 'Administrator'
+  | 'Store Manager'
+  | 'District Manager'
+  | 'Regional Manager';
+
+export type Permission = 
+  | 'view:user-management'
+  | 'view:system-health'
+  | 'view:scope-filters'
+  | 'view:dashboard'
+  | 'view:reports';
+
+export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
+  'Corporate Administrator': ['view:scope-filters', 'view:dashboard', 'view:reports'],
+  'Administrator': ['view:user-management', 'view:scope-filters'],
+  'Regional Manager': ['view:dashboard', 'view:reports', 'view:scope-filters'],
+  'District Manager': ['view:dashboard', 'view:reports'],
+  'Store Manager': ['view:dashboard', 'view:reports'],
+};

@@ -212,7 +212,7 @@ const seedDatabase = async () => {
     }
 
     // 7. Insert Menu Items
-    const menuResult = await client.query(`
+    await client.query(`
       INSERT INTO menu_items (name, price, cost, category) VALUES 
       ('Seafood Platter', 1200.00, 700.00, 'Mains'),
       ('Garlic Butter Lobster', 1500.00, 900.00, 'Mains'),

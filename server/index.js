@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 5001;
 
 const corsOptions = {
   origin: [
-    'http://localhost:5173', 
+    'http://localhost:5173',
     'http://127.0.0.1:5173',
     'http://localhost:5174',
     'http://127.0.0.1:5174'
@@ -24,6 +24,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none';");
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   next();
 });
 
@@ -51,20 +52,20 @@ app.get('/api/users', async (req, res) => {
       ORDER BY u.id ASC
     `);
     res.json(result.rows);
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: 'Failed to retrieve users' });
   }
 });
 
 // Create user (User Management)
 app.post('/api/users', async (req, res) => {
-  const { 
-    username, 
-    email, 
-    password, 
-    role, 
-    assigned_store_id, 
-    assigned_district_id, 
+  const {
+    username,
+    email,
+    password,
+    role,
+    assigned_store_id,
+    assigned_district_id,
     assigned_region_id,
     addNewStore,
     newStoreName,
@@ -170,14 +171,14 @@ app.put('/api/users/:id', async (req, res) => {
           assigned_region_id = $4
       WHERE id = $5
     `, [
-      role, 
+      role,
       assigned_store_id ? parseInt(assigned_store_id, 10) : null,
       assigned_district_id ? parseInt(assigned_district_id, 10) : null,
       assigned_region_id ? parseInt(assigned_region_id, 10) : null,
       userId
     ]);
     res.json({ success: true, message: 'User updated successfully' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: 'Failed to update user' });
   }
 });
@@ -191,18 +192,28 @@ app.delete('/api/users/:id', async (req, res) => {
   }
 
   try {
-    const userRes = await query('SELECT role FROM users WHERE id = $1', [userId]);
+    const userRes = await query('SELECT role, assigned_store_id FROM users WHERE id = $1', [userId]);
     if (userRes.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
+    const { role, assigned_store_id } = userRes.rows[0];
 
-    if (userRes.rows[0].role === 'Corporate Administrator') {
+    if (role === 'Corporate Administrator') {
       return res.status(403).json({ error: 'Corporate Administrator cannot be deleted' });
     }
 
     await query('DELETE FROM users WHERE id = $1', [userId]);
+
+    // If it was a dynamically created store (ID > 18) and no other users are assigned to it, delete the store too
+    if (assigned_store_id && assigned_store_id > 18) {
+      const otherUsers = await query('SELECT id FROM users WHERE assigned_store_id = $1', [assigned_store_id]);
+      if (otherUsers.rows.length === 0) {
+        await query('DELETE FROM stores WHERE id = $1', [assigned_store_id]);
+      }
+    }
+
     res.json({ success: true, message: 'User deleted successfully' });
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: 'Failed to delete user' });
   }
 });
@@ -219,7 +230,7 @@ app.get('/api/meta', async (req, res) => {
       districts: districts.rows,
       stores: stores.rows
     });
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: 'Failed to retrieve meta data' });
   }
 });
@@ -280,7 +291,7 @@ app.get('/api/dashboard', async (req, res) => {
     const user = userRes.rows[0];
     const { role, assigned_store_id, assigned_district_id, assigned_region_id } = user;
 
-    let scopeType = 'corporate'; 
+    let scopeType = 'corporate';
     let scopeId = null;
     let scopeName = 'All Stores';
 
@@ -291,8 +302,28 @@ app.get('/api/dashboard', async (req, res) => {
       scopeType = 'district';
       scopeId = assigned_district_id;
     } else if (role === 'Regional Manager') {
-      scopeType = 'region';
-      scopeId = assigned_region_id;
+      if (filterStoreId) {
+        const storeCheck = await query('SELECT region_id FROM stores WHERE id = $1', [parseInt(filterStoreId, 10)]);
+        if (storeCheck.rows.length > 0 && storeCheck.rows[0].region_id === assigned_region_id) {
+          scopeType = 'store';
+          scopeId = parseInt(filterStoreId, 10);
+        } else {
+          scopeType = 'region';
+          scopeId = assigned_region_id;
+        }
+      } else if (filterDistrictId) {
+        const distCheck = await query('SELECT region_id FROM districts WHERE id = $1', [parseInt(filterDistrictId, 10)]);
+        if (distCheck.rows.length > 0 && distCheck.rows[0].region_id === assigned_region_id) {
+          scopeType = 'district';
+          scopeId = parseInt(filterDistrictId, 10);
+        } else {
+          scopeType = 'region';
+          scopeId = assigned_region_id;
+        }
+      } else {
+        scopeType = 'region';
+        scopeId = assigned_region_id;
+      }
     } else {
       if (filterStoreId) {
         scopeType = 'store';
@@ -345,14 +376,11 @@ app.get('/api/dashboard', async (req, res) => {
       scopeName = 'All Stores';
       const regs = await query('SELECT COUNT(*) as count FROM regions');
       const dists = await query('SELECT COUNT(*) as count FROM districts');
+      const strs = await query('SELECT COUNT(*) as count FROM stores');
       regionsCount = parseInt(regs.rows[0].count, 10);
       districtsCount = parseInt(dists.rows[0].count, 10);
-      
-      // Total stores defaults to 18, dynamic based on user additions/deletions (base seeded users = 32)
-      const usrCountRes = await query('SELECT COUNT(*) as count FROM users');
-      const totalUsers = parseInt(usrCountRes.rows[0].count, 10);
-      storesCount = Math.max(0, 18 + (totalUsers - 32));
-      
+      storesCount = parseInt(strs.rows[0].count, 10);
+
       const storesRes = await query('SELECT id FROM stores');
       storeIdsList = storesRes.rows.map(s => s.id);
     }
@@ -362,14 +390,12 @@ app.get('/api/dashboard', async (req, res) => {
     let averageOrderValue = 0;
     let customerCount = 0;
     let cancelledOrders = 0;
-    let trendRows = [];
 
     const latestDateRes = await query('SELECT MAX(kpi_date) as max_date FROM region_kpis');
     const latestDate = latestDateRes.rows[0].max_date || new Date('2026-07-10');
 
     if (scopeType === 'store') {
       const kpis = await query('SELECT * FROM daily_store_kpis WHERE store_id = $1 ORDER BY kpi_date ASC', [scopeId]);
-      trendRows = kpis.rows;
       const latestKpi = kpis.rows.find(k => k.kpi_date.toISOString().split('T')[0] === latestDate.toISOString().split('T')[0]) || kpis.rows[kpis.rows.length - 1];
       if (latestKpi) {
         totalRevenue = parseFloat(latestKpi.total_revenue);
@@ -380,7 +406,6 @@ app.get('/api/dashboard', async (req, res) => {
       }
     } else if (scopeType === 'district') {
       const kpis = await query('SELECT * FROM district_kpis WHERE district_id = $1 ORDER BY kpi_date ASC', [scopeId]);
-      trendRows = kpis.rows;
       const latestKpi = kpis.rows.find(k => k.kpi_date.toISOString().split('T')[0] === latestDate.toISOString().split('T')[0]) || kpis.rows[kpis.rows.length - 1];
       if (latestKpi) {
         totalRevenue = parseFloat(latestKpi.total_revenue);
@@ -391,7 +416,6 @@ app.get('/api/dashboard', async (req, res) => {
       }
     } else if (scopeType === 'region') {
       const kpis = await query('SELECT * FROM region_kpis WHERE region_id = $1 ORDER BY kpi_date ASC', [scopeId]);
-      trendRows = kpis.rows;
       const latestKpi = kpis.rows.find(k => k.kpi_date.toISOString().split('T')[0] === latestDate.toISOString().split('T')[0]) || kpis.rows[kpis.rows.length - 1];
       if (latestKpi) {
         totalRevenue = parseFloat(latestKpi.total_revenue);
@@ -411,7 +435,6 @@ app.get('/api/dashboard', async (req, res) => {
         GROUP BY kpi_date 
         ORDER BY kpi_date ASC
       `);
-      trendRows = kpis.rows;
       const latestKpi = kpis.rows.find(k => k.kpi_date.toISOString().split('T')[0] === latestDate.toISOString().split('T')[0]) || kpis.rows[kpis.rows.length - 1];
       if (latestKpi) {
         totalRevenue = parseFloat(latestKpi.total_revenue);
@@ -618,7 +641,7 @@ app.get('/api/reports/sales-by-store', async (req, res) => {
 
   try {
     const { isFiltered, storeIdsFilter } = await resolveUserScope(userId);
-    
+
     let sql = `
       SELECT s.id, s.name as store_name, d.name as district_name, r.name as region_name,
              COALESCE(k.total_orders, 0) as total_orders,
@@ -638,7 +661,7 @@ app.get('/api/reports/sales-by-store', async (req, res) => {
 
     const result = await query(sql, params);
     res.json(result.rows);
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: 'Failed to retrieve sales-by-store report' });
   }
 });
@@ -652,7 +675,7 @@ app.get('/api/reports/sales-by-category', async (req, res) => {
 
   try {
     const { isFiltered, storeIdsFilter } = await resolveUserScope(userId);
-    
+
     let totalRevenue = 0;
     const latestDateRes = await query('SELECT MAX(kpi_date) as max_date FROM daily_store_kpis');
     const latestDate = latestDateRes.rows[0].max_date || new Date('2026-07-10');
@@ -682,7 +705,7 @@ app.get('/api/reports/sales-by-category', async (req, res) => {
     ];
 
     res.json(categories);
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: 'Failed to retrieve sales-by-category report' });
   }
 });
@@ -696,7 +719,7 @@ app.get('/api/reports/orders', async (req, res) => {
 
   try {
     const { isFiltered, storeIdsFilter } = await resolveUserScope(userId);
-    
+
     let sql = `
       SELECT o.id, s.name as store_name, o.customer_name, o.total_amount, o.status, o.created_at,
              (
@@ -717,7 +740,7 @@ app.get('/api/reports/orders', async (req, res) => {
 
     const result = await query(sql, params);
     res.json(result.rows);
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: 'Failed to retrieve detailed orders report' });
   }
 });
@@ -727,7 +750,7 @@ app.get('/api/health', async (req, res) => {
   try {
     await query('SELECT 1');
     const memoryUsage = process.memoryUsage();
-    
+
     res.json({
       status: 'Healthy',
       database: 'Connected',
@@ -738,7 +761,7 @@ app.get('/api/health', async (req, res) => {
         heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB`
       }
     });
-  } catch (err) {
+  } catch {
     res.status(500).json({
       status: 'Unhealthy',
       database: 'Disconnected',

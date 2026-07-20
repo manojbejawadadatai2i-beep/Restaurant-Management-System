@@ -1,23 +1,20 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import { useRBAC } from '../../hooks/useRBAC';
+import { useAuth } from '../../hooks/useAuth';
 import { 
   LayoutDashboard, 
   Users, 
-  HeartPulse, 
+  Settings, 
   FileText, 
   Utensils
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
-  const { currentUser } = useAuth();
-  const { hasPermission } = useRBAC();
+  const { currentUser, hasPermission } = useAuth();
 
   const showDashboardTab = hasPermission('view:dashboard');
   const showReportsTab = hasPermission('view:reports');
   const showUserTab = hasPermission('view:user-management');
-  const showHealthTab = hasPermission('view:system-health');
 
   const menuItems = [
     ...(showDashboardTab ? [{
@@ -44,15 +41,16 @@ export const Sidebar: React.FC = () => {
       bgColor: 'bg-amber-50/60 dark:bg-amber-950/20',
       activeColor: 'text-amber-600 dark:text-amber-400 border-amber-500 bg-amber-50/40 dark:bg-amber-950/10'
     }] : []),
-    ...(showHealthTab ? [{
-      path: '/health',
-      label: 'System Health',
-      icon: HeartPulse,
+    {
+      path: '/settings',
+      label: 'Settings',
+      icon: Settings,
       color: 'text-rose-500',
       bgColor: 'bg-rose-50/60 dark:bg-rose-950/20',
       activeColor: 'text-rose-600 dark:text-rose-400 border-rose-500 bg-rose-50/40 dark:bg-rose-950/10'
-    }] : [])
+    }
   ];
+
 
   return (
     <aside className="fixed inset-y-0 left-0 z-20 w-20 hover:w-64 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800 flex flex-col justify-between transition-all duration-300 ease-in-out group shadow-sm">
