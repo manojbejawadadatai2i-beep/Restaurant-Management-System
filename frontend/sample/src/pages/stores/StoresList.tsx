@@ -130,7 +130,7 @@ export const StoresList: React.FC = () => {
         </CardHeader>
         <CardContent>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-            Click on any store below to view its specific operational metrics, order trends, AOV, and expenses. Your view list is strictly restricted based on your role scope security policy.
+            Click on any store below to view its specific store metrics, order trends, AOV, and expenses. Your view list is strictly restricted based on your role scope security policy.
           </p>
         </CardContent>
       </Card>

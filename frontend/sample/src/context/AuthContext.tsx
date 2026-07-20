@@ -5,7 +5,6 @@ import type { User } from '../types';
 interface AuthContextType {
   users: User[];
   currentUser: User | null;
-  setCurrentUserById: (id: number) => void;
   login: (email: string, password: string) => Promise<void>;
   loginGoogle: (idToken: string) => Promise<void>;
   logout: () => void;
@@ -94,21 +93,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('currentUser', JSON.stringify(authenticatedUser));
   };
 
-  const setCurrentUserById = (id: number) => {
-    const user = users.find(u => u.id === id);
-    if (user) {
-      setCurrentUser(user);
-      localStorage.setItem('currentUser', JSON.stringify(user));
-    }
-  };
-
   const logout = () => {
     setCurrentUser(null);
     localStorage.removeItem('currentUser');
   };
 
   return (
-    <AuthContext.Provider value={{ users, currentUser, setCurrentUserById, login, loginGoogle, logout, isLoading, refreshUsers: fetchUsers }}>
+    <AuthContext.Provider value={{ users, currentUser, login, loginGoogle, logout, isLoading, refreshUsers: fetchUsers }}>
       {children}
     </AuthContext.Provider>
   );

@@ -64,7 +64,7 @@ export const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-20 w-20 hover:w-64 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800 flex flex-col justify-between transition-all duration-300 ease-in-out group shadow-sm">
+    <aside className="hidden md:flex fixed inset-y-0 left-0 z-20 w-20 hover:w-64 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800 flex-col justify-between transition-all duration-300 ease-in-out group shadow-sm">
       
       {/* Upper Section */}
       <div className="flex flex-col">

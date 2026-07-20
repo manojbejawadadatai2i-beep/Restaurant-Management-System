@@ -11,6 +11,8 @@ export interface User {
   email?: string | null;
   password?: string | null;
   token?: string;
+  requires_password_change?: boolean;
+  is_new_user?: boolean;
 }
 
 export interface DBRegion {
@@ -122,12 +124,24 @@ export interface StaffMember {
   assignment_name: string;
 }
 
+export interface ScopeTableRow {
+  store_id: number;
+  store_name: string;
+  district_id: number;
+  district_name: string;
+  region_id: number;
+  region_name: string;
+  total_revenue: number;
+  total_orders: number;
+}
+
 // Main API Dashboard Response
 export interface DashboardResponse {
   role: string;
   scopeName: string;
   metrics: DashboardMetrics;
   scopeDirectory: ScopeDirectory;
+  scopeTable?: ScopeTableRow[];
   staff: StaffMember[];
   revenueTrend: RevenueTrendPoint[];
   peakHours: PeakHoursPoint[];

@@ -41,8 +41,7 @@ export const Reports: React.FC = () => {
       });
       return res.data;
     },
-    enabled: !!currentUser,
-    refetchInterval: 3000
+    enabled: !!currentUser
   });
 
   const handleExportCSV = () => {
@@ -135,40 +134,42 @@ export const Reports: React.FC = () => {
         )}
 
         {!isLoading && !isError && (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Store ID</TableHead>
-                <TableHead>Store Name</TableHead>
-                <TableHead>District</TableHead>
-                <TableHead className="text-center">Total Orders</TableHead>
-                <TableHead className="text-right">Avg Order Value</TableHead>
-                <TableHead className="text-right">Total Revenue</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredStoreData.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-semibold text-slate-500 dark:text-slate-400">#{item.id}</TableCell>
-                  <TableCell className="font-bold text-slate-900 dark:text-white">{item.store_name}</TableCell>
-                  <TableCell>
-                    <div>
-                      <p className="font-semibold">{item.district_name || 'N/A'}</p>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-550 block">{item.region_name || 'N/A'}</p>
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-medium text-center">{item.total_orders}</TableCell>
-                  <TableCell className="font-semibold text-right">{formatCurrency(parseFloat(item.avg_order_value))}</TableCell>
-                  <TableCell className="font-bold text-orange-600 dark:text-orange-400 text-right">{formatCurrency(parseFloat(item.total_revenue))}</TableCell>
-                </TableRow>
-              ))}
-              {filteredStoreData.length === 0 && (
+          <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-2xl shadow-sm bg-white dark:bg-slate-900">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-10 text-slate-400 font-semibold">No stores found.</TableCell>
+                  <TableHead>Store ID</TableHead>
+                  <TableHead>Store Name</TableHead>
+                  <TableHead>District</TableHead>
+                  <TableHead className="text-center">Total Orders</TableHead>
+                  <TableHead className="text-right">Avg Order Value</TableHead>
+                  <TableHead className="text-right">Total Revenue</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredStoreData.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-semibold text-slate-500 dark:text-slate-400">#{item.id}</TableCell>
+                    <TableCell className="font-bold text-slate-900 dark:text-white">{item.store_name}</TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-semibold">{item.district_name || 'N/A'}</p>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-550 block">{item.region_name || 'N/A'}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-medium text-center">{item.total_orders}</TableCell>
+                    <TableCell className="font-semibold text-right">{formatCurrency(parseFloat(item.avg_order_value))}</TableCell>
+                    <TableCell className="font-bold text-orange-600 dark:text-orange-400 text-right">{formatCurrency(parseFloat(item.total_revenue))}</TableCell>
+                  </TableRow>
+                ))}
+                {filteredStoreData.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-10 text-slate-400 font-semibold">No stores found.</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
     </div>

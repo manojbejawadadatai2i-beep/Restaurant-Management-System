@@ -26,7 +26,6 @@ export const UserManagement: React.FC = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [storeOption, setStoreOption] = useState<'existing' | 'new'>('existing');
   const [newStoreName, setNewStoreName] = useState('');
   const [role, setRole] = useState('');
@@ -38,6 +37,8 @@ export const UserManagement: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [message, setMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [createdUserEmail, setCreatedUserEmail] = useState<string | null>(null);
 
   const filteredUsers = users.filter(u => {
     const q = searchQuery.toLowerCase();
@@ -51,10 +52,6 @@ export const UserManagement: React.FC = () => {
     );
   });
 
-  const visibleDistricts = meta && assignedRegionId
-    ? meta.districts.filter(d => d.region_id === parseInt(assignedRegionId, 10))
-    : [];
-
   useEffect(() => {
     const fetchMeta = async () => {
       try {
@@ -67,17 +64,6 @@ export const UserManagement: React.FC = () => {
     fetchMeta();
   }, []);
 
-  const handleRegionChange = (val: string) => {
-    setAssignedRegionId(val);
-    setAssignedDistrictId('');
-    setAssignedStoreId('');
-  };
-
-  const handleDistrictChange = (val: string) => {
-    setAssignedDistrictId(val);
-    setAssignedStoreId('');
-  };
-
   const handleEditClick = (user: User) => {
     setIsAdding(false);
     setEditingUser(user);
@@ -86,6 +72,7 @@ export const UserManagement: React.FC = () => {
     setAssignedDistrictId(user.assigned_district_id?.toString() || '');
     setAssignedRegionId(user.assigned_region_id?.toString() || '');
     setMessage('');
+    setCreatedUserEmail(null);
     setIsFormOpen(true);
   };
 
@@ -94,7 +81,6 @@ export const UserManagement: React.FC = () => {
     setIsAdding(true);
     setUsername('');
     setEmail('');
-    setPassword('');
     setRole('Store Manager');
     setAssignedRegionId('');
     setAssignedDistrictId('');
@@ -102,6 +88,7 @@ export const UserManagement: React.FC = () => {
     setStoreOption('existing');
     setNewStoreName('');
     setMessage('');
+    setCreatedUserEmail(null);
     setIsFormOpen(true);
   };
 
@@ -111,27 +98,41 @@ export const UserManagement: React.FC = () => {
 
     setIsSaving(true);
     setMessage('');
+    setCreatedUserEmail(null);
     try {
       if (isAdding) {
-        await axios.post('/api/users', {
+        let finalDistrictId = assignedDistrictId;
+        let finalRegionId = assignedRegionId;
+
+        if (role === 'Store Manager' && storeOption === 'existing' && assignedStoreId && meta) {
+          const matchedStore = meta.stores.find(s => s.id === parseInt(assignedStoreId, 10));
+          if (matchedStore) {
+            finalDistrictId = matchedStore.district_id.toString();
+            finalRegionId = matchedStore.region_id.toString();
+          }
+        } else if (role === 'District Manager' && assignedDistrictId && meta) {
+          const matchedDist = meta.districts.find(d => d.id === parseInt(assignedDistrictId, 10));
+          if (matchedDist) {
+            finalRegionId = matchedDist.region_id.toString();
+          }
+        }
+
+        const res = await axios.post('/api/users', {
           username,
           email: email || null,
-          password: password || null,
           role,
           assigned_store_id: storeOption === 'existing' && assignedStoreId ? assignedStoreId : null,
-          assigned_district_id: assignedDistrictId || null,
-          assigned_region_id: assignedRegionId || null,
+          assigned_district_id: finalDistrictId || null,
+          assigned_region_id: finalRegionId || null,
           addNewStore: storeOption === 'new',
           newStoreName: storeOption === 'new' ? newStoreName : null,
-          newStoreId: null
+          newStoreId: storeOption === 'new' ? Math.floor(100 + Math.random() * 900).toString() : null
         });
-        setMessage('User added successfully!');
+
+        const targetEmail = res.data.recipientEmail || email || `${username.toLowerCase().replace(/\s+/g, '_')}@restaurant.com`;
+        setCreatedUserEmail(targetEmail);
+        setMessage('User added successfully! Automated email dispatched.');
         await refreshUsers();
-        setTimeout(() => {
-          setIsFormOpen(false);
-          setIsAdding(false);
-          setMessage('');
-        }, 1200);
       } else {
         await axios.put(`/api/users/${editingUser!.id}`, {
           role,
@@ -173,6 +174,14 @@ export const UserManagement: React.FC = () => {
       setIsDeleting(false);
     }
   };
+
+  // Derive assigned scope info badges for UI preview
+  const selectedStoreObj = meta?.stores.find(s => s.id === parseInt(assignedStoreId, 10));
+  const storeDistrictObj = selectedStoreObj ? meta?.districts.find(d => d.id === selectedStoreObj.district_id) : null;
+  const storeRegionObj = selectedStoreObj ? meta?.regions.find(r => r.id === selectedStoreObj.region_id) : null;
+
+  const selectedDistObj = meta?.districts.find(d => d.id === parseInt(assignedDistrictId, 10));
+  const distRegionObj = selectedDistObj ? meta?.regions.find(r => r.id === selectedDistObj.region_id) : null;
 
   const canAccess = hasPermission('view:user-management');
 
@@ -232,102 +241,104 @@ export const UserManagement: React.FC = () => {
         </div>
 
         {/* Users Table */}
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Username</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Assigned Scope</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredUsers.map((u) => (
-              <TableRow key={u.id}>
-                <TableCell className="font-bold text-slate-900 dark:text-white">
-                  <div>
-                    <p>{u.username}</p>
-                    {u.email && <p className="text-[10px] font-semibold text-slate-400 mt-0.5">{u.email}</p>}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400">
-                    {u.role}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col gap-1">
-                    {u.store_name && (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-                        <Store size={13} className="text-slate-400" /> {u.store_name}
-                      </span>
-                    )}
-                    {u.district_name && (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-                        <Map size={13} className="text-slate-400" /> {u.district_name}
-                      </span>
-                    )}
-                    {u.region_name && (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-                        <Landmark size={13} className="text-slate-400" /> {u.region_name}
-                      </span>
-                    )}
-                    {!u.store_name && !u.district_name && !u.region_name && (
-                      <span className="text-slate-400 text-xs font-medium">System-Wide Access</span>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">
-                  {deletingUserId === u.id ? (
-                    <div className="inline-flex items-center gap-1.5">
-                      <Button
-                        onClick={() => handleDelete(u.id)}
-                        disabled={isDeleting}
-                        variant="danger"
-                        size="sm"
-                      >
-                        Confirm
-                      </Button>
-                      <Button
-                        onClick={() => setDeletingUserId(null)}
-                        disabled={isDeleting}
-                        variant="outline"
-                        size="sm"
-                      >
-                        Cancel
-                      </Button>
+        <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-2xl shadow-sm bg-white dark:bg-slate-900">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Username</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Assigned Scope</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredUsers.map((u) => (
+                <TableRow key={u.id}>
+                  <TableCell className="font-bold text-slate-900 dark:text-white">
+                    <div>
+                      <p>{u.username}</p>
+                      {u.email && <p className="text-[10px] font-semibold text-slate-400 mt-0.5">{u.email}</p>}
                     </div>
-                  ) : (
-                    <div className="inline-flex items-center gap-2">
-                      {u.role !== 'Corporate Administrator' && u.role !== 'Administrator' && (
+                  </TableCell>
+                  <TableCell>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400">
+                      {u.role}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      {u.store_name && (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                          <Store size={13} className="text-slate-400" /> {u.store_name}
+                        </span>
+                      )}
+                      {u.district_name && (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                          <Map size={13} className="text-slate-400" /> {u.district_name}
+                        </span>
+                      )}
+                      {u.region_name && (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                          <Landmark size={13} className="text-slate-400" /> {u.region_name}
+                        </span>
+                      )}
+                      {!u.store_name && !u.district_name && !u.region_name && (
+                        <span className="text-slate-400 text-xs font-medium">System-Wide Access</span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {deletingUserId === u.id ? (
+                      <div className="inline-flex items-center gap-1.5">
                         <Button
-                          onClick={() => handleEditClick(u)}
+                          onClick={() => handleDelete(u.id)}
+                          disabled={isDeleting}
+                          variant="danger"
+                          size="sm"
+                        >
+                          Confirm
+                        </Button>
+                        <Button
+                          onClick={() => setDeletingUserId(null)}
+                          disabled={isDeleting}
                           variant="outline"
                           size="sm"
                         >
-                          Manage
+                          Cancel
                         </Button>
-                      )}
-                      {currentUser?.id !== u.id && u.role !== 'Corporate Administrator' && u.role !== 'Administrator' && (
-                        <Button
-                          onClick={() => {
-                            setDeletingUserId(u.id);
-                            setMessage('');
-                          }}
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
-                        >
-                          <Trash2 size={14} />
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-2">
+                        {u.role !== 'Corporate Administrator' && u.role !== 'Administrator' && (
+                          <Button
+                            onClick={() => handleEditClick(u)}
+                            variant="outline"
+                            size="sm"
+                          >
+                            Manage
+                          </Button>
+                        )}
+                        {currentUser?.id !== u.id && u.role !== 'Corporate Administrator' && u.role !== 'Administrator' && (
+                          <Button
+                            onClick={() => {
+                              setDeletingUserId(u.id);
+                              setMessage('');
+                            }}
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       {/* Edit/Add Dialog Overlay */}
@@ -357,14 +368,21 @@ export const UserManagement: React.FC = () => {
                 placeholder="name@restaurant.com"
                 required
               />
-              <Input
-                label="Password"
-                type="password"
-                value={password}
-                onChange={(e: any) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-              />
+              
+              {/* Abstracted Automated Email Notification Banner */}
+              <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-3.5 rounded-xl flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-slate-900 dark:text-white">
+                    Credentials & Access Verification
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                    A secure password and verification link will be automatically emailed to the user upon creation.
+                  </p>
+                </div>
+                <span className="text-[9px] font-extrabold uppercase px-2.5 py-1 bg-blue-500 text-white rounded-lg tracking-wider flex-shrink-0">
+                  Automated Email
+                </span>
+              </div>
             </>
           )}
 
@@ -379,120 +397,122 @@ export const UserManagement: React.FC = () => {
             ]}
           />
 
-          {isAdding ? (
-            <>
-              {meta && (
-                <Select
-                  label="Region Assignment"
-                  value={assignedRegionId}
-                  onChange={(e: any) => handleRegionChange(e.target.value)}
-                  placeholder="Select Region..."
-                  required
-                  options={meta.regions.map(r => ({ value: r.id, label: r.name }))}
-                />
-              )}
+          {/* Scope Assignment - Backend Auto-Derives Region & District */}
+          {role === 'Store Manager' && meta && (
+            <div className="space-y-3">
+              <div className="flex gap-4 border-b border-slate-100 dark:border-slate-800 pb-2">
+                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-350 font-semibold cursor-pointer">
+                  <input
+                    type="radio"
+                    name="storeOption"
+                    checked={storeOption === 'existing'}
+                    onChange={() => setStoreOption('existing')}
+                    className="accent-orange-500"
+                  />
+                  Existing Store
+                </label>
+                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-350 font-semibold cursor-pointer">
+                  <input
+                    type="radio"
+                    name="storeOption"
+                    checked={storeOption === 'new'}
+                    onChange={() => setStoreOption('new')}
+                    className="accent-orange-500"
+                  />
+                  Create New Store
+                </label>
+              </div>
 
-              {meta && assignedRegionId && (
-                <Select
-                  label="District Assignment"
-                  value={assignedDistrictId}
-                  onChange={(e: any) => handleDistrictChange(e.target.value)}
-                  placeholder="Select District..."
-                  required
-                  options={visibleDistricts.map(d => ({ value: d.id, label: d.name }))}
-                />
-              )}
+              {storeOption === 'existing' ? (
+                <>
+                  <Select
+                    label="Assign Store"
+                    value={assignedStoreId}
+                    onChange={(e: any) => setAssignedStoreId(e.target.value)}
+                    placeholder="Select Store..."
+                    required
+                    options={meta.stores.map(s => ({ value: s.id, label: s.name }))}
+                  />
 
-              {meta && assignedDistrictId && (
-                <div className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-3">
-                  <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none">Store Setup Mode</label>
-                  <div className="flex gap-4">
-                    <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-350 font-semibold cursor-pointer">
-                      <input
-                        type="radio"
-                        name="storeOption"
-                        checked={storeOption === 'existing'}
-                        onChange={() => setStoreOption('existing')}
-                        className="accent-orange-500"
-                      />
-                      Existing Store
-                    </label>
-                    <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-350 font-semibold cursor-pointer">
-                      <input
-                        type="radio"
-                        name="storeOption"
-                        checked={storeOption === 'new'}
-                        onChange={() => setStoreOption('new')}
-                        className="accent-orange-500"
-                      />
-                      Create New Store
-                    </label>
-                  </div>
-
-                  {storeOption === 'existing' ? (
-                    <Select
-                      label="Assign Existing Store"
-                      value={assignedStoreId}
-                      onChange={(e: any) => setAssignedStoreId(e.target.value)}
-                      placeholder="Select Store..."
-                      required
-                      options={meta.stores
-                        .filter(s => s.district_id === parseInt(assignedDistrictId, 10))
-                        .map(s => ({ value: s.id, label: s.name }))}
-                    />
-                  ) : (
-                    <div className="space-y-3 bg-slate-50 dark:bg-slate-950/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
-                      <Input
-                        label="New Store Name"
-                        type="text"
-                        value={newStoreName}
-                        onChange={(e: any) => setNewStoreName(e.target.value)}
-                        placeholder="e.g. Store 19"
-                        required
-                      />
+                  {assignedStoreId && storeDistrictObj && storeRegionObj && (
+                    <div className="bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                      <p className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Backend Auto-Resolved Scope</p>
+                      <div className="flex gap-3 font-semibold">
+                        <span>District: <strong className="text-slate-800 dark:text-slate-200">{storeDistrictObj.name}</strong></span>
+                        <span>Region: <strong className="text-slate-800 dark:text-slate-200">{storeRegionObj.name}</strong></span>
+                      </div>
                     </div>
+                  )}
+                </>
+              ) : (
+                <div className="space-y-3 bg-slate-50 dark:bg-slate-950/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <Input
+                    label="New Store Name"
+                    type="text"
+                    value={newStoreName}
+                    onChange={(e: any) => setNewStoreName(e.target.value)}
+                    placeholder="e.g. Store 19"
+                    required
+                  />
+                  <Select
+                    label="Assign District"
+                    value={assignedDistrictId}
+                    onChange={(e: any) => setAssignedDistrictId(e.target.value)}
+                    placeholder="Select District..."
+                    required
+                    options={meta.districts.map(d => ({ value: d.id, label: d.name }))}
+                  />
+                  {assignedDistrictId && distRegionObj && (
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Region <strong className="text-slate-800 dark:text-slate-200">{distRegionObj.name}</strong> auto-assigned by backend.
+                    </p>
                   )}
                 </div>
               )}
-            </>
-          ) : (
-            <>
-              {role === 'Store Manager' && meta && (
-                <Select
-                  label="Assign Store Scope"
-                  value={assignedStoreId}
-                  onChange={(e: any) => setAssignedStoreId(e.target.value)}
-                  placeholder="Select Store..."
-                  required
-                  options={meta.stores.map(s => ({ value: s.id, label: s.name }))}
-                />
-              )}
-
-              {role === 'District Manager' && meta && (
-                <Select
-                  label="Assign District Scope"
-                  value={assignedDistrictId}
-                  onChange={(e: any) => setAssignedDistrictId(e.target.value)}
-                  placeholder="Select District..."
-                  required
-                  options={meta.districts.map(d => ({ value: d.id, label: d.name }))}
-                />
-              )}
-
-              {role === 'Regional Manager' && meta && (
-                <Select
-                  label="Assign Region Scope"
-                  value={assignedRegionId}
-                  onChange={(e: any) => setAssignedRegionId(e.target.value)}
-                  placeholder="Select Region..."
-                  required
-                  options={meta.regions.map(r => ({ value: r.id, label: r.name }))}
-                />
-              )}
-            </>
+            </div>
           )}
 
-          {message && (
+          {role === 'District Manager' && meta && (
+            <div className="space-y-2">
+              <Select
+                label="Assign District"
+                value={assignedDistrictId}
+                onChange={(e: any) => setAssignedDistrictId(e.target.value)}
+                placeholder="Select District..."
+                required
+                options={meta.districts.map(d => ({ value: d.id, label: d.name }))}
+              />
+              {assignedDistrictId && distRegionObj && (
+                <div className="bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400">
+                  <p className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Backend Auto-Resolved Scope</p>
+                  <p className="font-semibold mt-0.5">Region: <strong className="text-slate-800 dark:text-slate-200">{distRegionObj.name}</strong></p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {role === 'Regional Manager' && meta && (
+            <Select
+              label="Assign Region"
+              value={assignedRegionId}
+              onChange={(e: any) => setAssignedRegionId(e.target.value)}
+              placeholder="Select Region..."
+              required
+              options={meta.regions.map(r => ({ value: r.id, label: r.name }))}
+            />
+          )}
+
+          {/* Automated Email Confirmation Banner */}
+          {createdUserEmail && (
+            <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-4 rounded-xl space-y-1">
+              <p className="text-xs font-extrabold text-emerald-800 dark:text-emerald-300">User Created Successfully!</p>
+              <p className="text-xs text-emerald-700 dark:text-emerald-400 leading-relaxed">
+                An automated email with login credentials and account verification instructions has been sent to <strong>{createdUserEmail}</strong>.
+              </p>
+            </div>
+          )}
+
+          {message && !createdUserEmail && (
             <Alert variant={message.includes('successfully') ? 'success' : 'error'}>
               {message}
             </Alert>
@@ -511,7 +531,7 @@ export const UserManagement: React.FC = () => {
               onClick={() => setIsFormOpen(false)}
               variant="outline"
             >
-              Cancel
+              {createdUserEmail ? 'Close' : 'Cancel'}
             </Button>
           </div>
         </form>

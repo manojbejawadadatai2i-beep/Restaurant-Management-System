@@ -305,14 +305,19 @@ export const LandingPage: React.FC = () => {
           </div>
 
           {/* Google Sign-in Container */}
-          <div className="flex justify-center w-full min-h-[40px]">
-            <div 
-              id="g_id_onload"
-              data-client_id="292370442272-doiknq371kpbrkekkv1vfcq11hur3me7.apps.googleusercontent.com"
-              data-callback="handleGoogleCredentialResponse"
-              data-auto_prompt="false"
-            ></div>
-            <div className="g_id_signin w-full" data-type="standard" data-shape="rectangular" data-theme="outline" data-size="large" data-logo_alignment="left" data-width="360"></div>
+          <div className="flex flex-col items-center justify-center w-full gap-2">
+            <div className="flex justify-center w-full min-h-[40px]">
+              <div 
+                id="g_id_onload"
+                data-client_id={import.meta.env.VITE_GOOGLE_CLIENT_ID || "292370442272-doiknq371kpbrkekkv1vfcq11hur3me7.apps.googleusercontent.com"}
+                data-callback="handleGoogleCredentialResponse"
+                data-auto_prompt="false"
+              ></div>
+              <div className="g_id_signin w-full" data-type="standard" data-shape="rectangular" data-theme="outline" data-size="large" data-logo_alignment="left" data-width="360"></div>
+            </div>
+            <p className="text-[9.5px] text-slate-400 dark:text-slate-500 text-center leading-tight">
+              Google OAuth Origin: <code className="text-blue-500 dark:text-blue-400 font-semibold">{window.location.origin}</code>
+            </p>
           </div>
 
           {/* Quick Profile Autofill section */}

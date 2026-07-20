@@ -101,6 +101,21 @@ CREATE TABLE IF NOT EXISTS stores (
 );
 
 -- ----------------------------------------------------------------------------
+-- 5b. scopes
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS scopes (
+    id SERIAL PRIMARY KEY,
+    scope_name VARCHAR(100) NOT NULL,
+    scope_type VARCHAR(20) NOT NULL CHECK (scope_type IN ('corporate', 'region', 'district', 'store')),
+    parent_scope_id INTEGER REFERENCES scopes(id) ON DELETE CASCADE,
+    region_id INTEGER REFERENCES regions(id) ON DELETE CASCADE,
+    district_id INTEGER REFERENCES districts(id) ON DELETE CASCADE,
+    store_id INTEGER REFERENCES stores(id) ON DELETE CASCADE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ----------------------------------------------------------------------------
 -- 6. users
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (

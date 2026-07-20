@@ -10,6 +10,7 @@ from Api.users import router as users_router
 from Api.meta import router as meta_router
 from Api.dashboard import router as dashboard_router
 from Api.reports import router as reports_router
+from Api.insights import router as insights_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,6 +41,7 @@ app.include_router(users_router)
 app.include_router(meta_router)
 app.include_router(dashboard_router)
 app.include_router(reports_router)
+app.include_router(insights_router)
 
 @app.get("/")
 def read_root():

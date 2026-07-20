@@ -10,7 +10,6 @@ from Services.rbac_service import RBACService
 from Repositories.sql_executor import execute_sql
 
 logger = logging.getLogger(__name__)
-
 class ChatbotService:
     def __init__(self):
         self.settings = get_settings()

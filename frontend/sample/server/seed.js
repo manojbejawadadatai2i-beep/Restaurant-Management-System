@@ -1,4 +1,6 @@
 import { pool } from './db.js';
+import fs from 'fs';
+import path from 'path';
 
 const seedDatabase = async () => {
   console.log('Seeding database started...');
@@ -8,6 +10,7 @@ const seedDatabase = async () => {
 
     // 1. Drop existing tables
     await client.query(`
+      DROP TABLE IF EXISTS scopes CASCADE;
       DROP TABLE IF EXISTS daily_store_kpis CASCADE;
       DROP TABLE IF EXISTS district_kpis CASCADE;
       DROP TABLE IF EXISTS region_kpis CASCADE;
@@ -40,6 +43,17 @@ const seedDatabase = async () => {
         name VARCHAR(100) NOT NULL UNIQUE,
         district_id INT REFERENCES districts(id) ON DELETE CASCADE,
         region_id INT REFERENCES regions(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE scopes (
+        id SERIAL PRIMARY KEY,
+        scope_name VARCHAR(100) NOT NULL,
+        scope_type VARCHAR(20) NOT NULL CHECK (scope_type IN ('corporate', 'region', 'district', 'store')),
+        parent_scope_id INT REFERENCES scopes(id) ON DELETE CASCADE,
+        region_id INT REFERENCES regions(id) ON DELETE CASCADE,
+        district_id INT REFERENCES districts(id) ON DELETE CASCADE,
+        store_id INT REFERENCES stores(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
       CREATE TABLE users (
@@ -163,21 +177,78 @@ const seedDatabase = async () => {
       await client.query('INSERT INTO stores (name, district_id, region_id) VALUES ($1, $2, $3)', [`Store ${i}`, districtId, regionId]);
     }
 
-    // 6. Insert Users
+    // 5b. Populate Scopes Table
+    const corpScopeRes = await client.query(`
+      INSERT INTO scopes (scope_name, scope_type) VALUES ('All Operations', 'corporate') RETURNING id
+    `);
+    const corpScopeId = corpScopeRes.rows[0].id;
+
+    const regionScopeMap = {};
+    for (let rId = 1; rId <= 3; rId++) {
+      const regName = regions[rId - 1];
+      const res = await client.query(`
+        INSERT INTO scopes (scope_name, scope_type, parent_scope_id, region_id) 
+        VALUES ($1, 'region', $2, $3) RETURNING id
+      `, [regName, corpScopeId, rId]);
+      regionScopeMap[rId] = res.rows[0].id;
+    }
+
+    const districtScopeMap = {};
+    for (let dId = 1; dId <= 9; dId++) {
+      const distName = districts[dId - 1].name;
+      const rId = districts[dId - 1].region_id;
+      const res = await client.query(`
+        INSERT INTO scopes (scope_name, scope_type, parent_scope_id, region_id, district_id) 
+        VALUES ($1, 'district', $2, $3, $4) RETURNING id
+      `, [distName, regionScopeMap[rId], rId, dId]);
+      districtScopeMap[dId] = res.rows[0].id;
+    }
+
+    for (let sId = 1; sId <= 18; sId++) {
+      const dId = Math.ceil(sId / 2);
+      const rId = Math.ceil(dId / 3);
+      await client.query(`
+        INSERT INTO scopes (scope_name, scope_type, parent_scope_id, region_id, district_id, store_id) 
+        VALUES ($1, 'store', $2, $3, $4, $5)
+      `, [`Store ${sId}`, districtScopeMap[dId], rId, dId, sId]);
+    }
+
+    // 6. Insert Users & Export Credentials to CSV
     const getEmail = (name) => name.toLowerCase().replace(/ /g, '_') + '@restaurant.com';
-    const defaultPassword = 'password123';
+    const getPassword = (username) => {
+      const clean = username.replace(/[^a-zA-Z0-9]/g, '');
+      return (clean.slice(0, 4) || 'user').toLowerCase() + '@123';
+    };
 
-    // Corporate Admin (Corporate Administrator)
-    await client.query(`
-      INSERT INTO users (username, email, password, role, assigned_store_id, assigned_district_id, assigned_region_id) 
-      VALUES ('Corporate Admin', $1, $2, 'Corporate Administrator', NULL, NULL, NULL)
-    `, [getEmail('Corporate Admin'), defaultPassword]);
+    const userCredentialsList = [];
 
-    // System Administrator (Administrator)
-    await client.query(`
-      INSERT INTO users (username, email, password, role, assigned_store_id, assigned_district_id, assigned_region_id) 
-      VALUES ('System Admin', $1, $2, 'Administrator', NULL, NULL, NULL)
-    `, [getEmail('System Admin'), defaultPassword]);
+    // Helper to insert and log user
+    const insertUser = async (username, role, storeId, districtId, regionId) => {
+      const email = getEmail(username);
+      const pass = getPassword(username);
+      const res = await client.query(`
+        INSERT INTO users (username, email, password, role, assigned_store_id, assigned_district_id, assigned_region_id) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id
+      `, [username, email, pass, role, storeId, districtId, regionId]);
+      
+      userCredentialsList.push({
+        id: res.rows[0].id,
+        username,
+        email,
+        password: pass,
+        role,
+        assigned_store_id: storeId || 'None',
+        assigned_district_id: districtId || 'None',
+        assigned_region_id: regionId || 'None'
+      });
+    };
+
+    // Corporate Admin
+    await insertUser('Corporate Admin', 'Corporate Administrator', null, null, null);
+
+    // System Administrator
+    await insertUser('System Admin', 'Administrator', null, null, null);
 
     // Region Managers
     const regionManagers = [
@@ -186,29 +257,38 @@ const seedDatabase = async () => {
       { username: 'East Region Manager', region_id: 3 }
     ];
     for (const rm of regionManagers) {
-      await client.query(`
-        INSERT INTO users (username, email, password, role, assigned_store_id, assigned_district_id, assigned_region_id) 
-        VALUES ($1, $2, $3, 'Regional Manager', NULL, NULL, $4)
-      `, [rm.username, getEmail(rm.username), defaultPassword, rm.region_id]);
+      await insertUser(rm.username, 'Regional Manager', null, null, rm.region_id);
     }
 
     // District Managers (A to I)
     const districtLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
     for (let i = 1; i <= 9; i++) {
       const name = `District ${districtLetters[i - 1]} Manager`;
-      await client.query(`
-        INSERT INTO users (username, email, password, role, assigned_store_id, assigned_district_id, assigned_region_id) 
-        VALUES ($1, $2, $3, 'District Manager', NULL, $4, NULL)
-      `, [name, getEmail(name), defaultPassword, i]);
+      await insertUser(name, 'District Manager', null, i, null);
     }
 
     // Store Managers (1 to 18)
     for (let i = 1; i <= 18; i++) {
       const name = `Store Manager ${i}`;
-      await client.query(`
-        INSERT INTO users (username, email, password, role, assigned_store_id, assigned_district_id, assigned_region_id) 
-        VALUES ($1, $2, $3, 'Store Manager', $4, NULL, NULL)
-      `, [name, getEmail(name), defaultPassword, i]);
+      await insertUser(name, 'Store Manager', i, null, null);
+    }
+
+    // Write CSV Export
+    const csvHeader = 'ID,Username,Email,Password,Role,Assigned Store ID,Assigned District ID,Assigned Region ID\n';
+    const csvRows = userCredentialsList.map(u => 
+      `"${u.id}","${u.username}","${u.email}","${u.password}","${u.role}","${u.assigned_store_id}","${u.assigned_district_id}","${u.assigned_region_id}"`
+    ).join('\n');
+    const csvContent = csvHeader + csvRows;
+
+    const csvPathProject = path.resolve(process.cwd(), '../../User_Credentials.csv');
+    const csvPathArtifacts = 'C:/Users/maddi/.gemini/antigravity-ide/brain/5fd5189b-279a-4de3-8518-8664366b318d/User_Credentials.csv';
+
+    try {
+      fs.writeFileSync(csvPathProject, csvContent);
+      fs.writeFileSync(csvPathArtifacts, csvContent);
+      console.log('User credentials CSV generated at:', csvPathProject);
+    } catch (e) {
+      console.error('Failed to write CSV file:', e);
     }
 
     // 7. Insert Menu Items

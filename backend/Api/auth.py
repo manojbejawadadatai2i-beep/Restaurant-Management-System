@@ -113,6 +113,8 @@ def login(request: LoginRequest):
             
             access_token = create_access_token(token_claims)
 
+            is_default_password = (stored_hash == "$2b$12$PLACEHOLDER_HASH" or request.password == "$2b$12$PLACEHOLDER_HASH")
+
             return {
                 "message": "Login Successful",
                 "access_token": access_token,
@@ -120,12 +122,14 @@ def login(request: LoginRequest):
                 "user": {
                     "id": result.get("id"),
                     "user_id": f"emp_{result.get('id')}",
-                    "username": result.get("full_name"),
+                    "username": result.get("full_name") or result.get("username"),
                     "email": result.get("email"),
                     "role": role_name,
                     "assigned_store_id": result.get("store_id"),
                     "assigned_district_id": result.get("district_id"),
-                    "assigned_region_id": result.get("region_id")
+                    "assigned_region_id": result.get("region_id"),
+                    "requires_password_change": is_default_password,
+                    "is_new_user": is_default_password
                 }
             }
 
