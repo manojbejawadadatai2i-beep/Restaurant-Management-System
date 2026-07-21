@@ -1,17 +1,147 @@
-# Environment variables
+# ============================================================
+# .gitignore for Restaurant Management System
+# Full-Stack: React + TypeScript (Vite) + Node.js + Python
+# ============================================================
+
+# ----------------------------
+# Environment & Secrets
+# ----------------------------
 .env
+.env.*
+!.env.example
 backend/.env
+frontend/sample/.env
+*.pem
+*.key
+*.cert
+secrets/
+credentials/
+User_Credentials.csv
+User_Credentials.xlsx
 
-# Python cache
+# ----------------------------
+# Python
+# ----------------------------
 __pycache__/
+*.py[cod]
+*$py.class
 *.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+*.egg-info/
+.installed.cfg
+*.egg
+*.manifest
+*.spec
+.pytest_cache/
+.hypothesis/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+coverage.xml
+*.cover
+.coverage
+.coverage.*
+htmlcov/
 
-# Virtual environment
+# ----------------------------
+# Virtual Environments
+# ----------------------------
 venv/
 .venv/
+env/
+ENV/
+env.bak/
+venv.bak/
 
-# Editor/OS settings
-.vscode/
-.idea/
-Thumbs.db
+# ----------------------------
+# Node.js / npm / Vite / React
+# ----------------------------
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.npm
+.pnp
+.pnp.js
+
+# ----------------------------
+# TypeScript
+# ----------------------------
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# ----------------------------
+# Build Outputs
+# ----------------------------
+build/
+out/
+*.min.js
+*.min.css
+
+# ----------------------------
+# Database / Data files
+# ----------------------------
+*.sql.bak
+*.dump
+*.sqlite
+*.db
+dataBase/dumps/
+*.csv
+*.xlsx
+
+# ----------------------------
+# Logs
+# ----------------------------
+logs/
+*.log
+*.log.*
+
+# ----------------------------
+# OS / Editor
+# ----------------------------
 .DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ----------------------------
+# Testing & Temporary Files
+# ----------------------------
+coverage/
+.nyc_output/
+*.test.js.snap
+tmp/
+temp/
+.cache/

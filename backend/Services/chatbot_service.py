@@ -10,7 +10,6 @@ from Services.rbac_service import RBACService
 from Repositories.sql_executor import execute_sql
 
 logger = logging.getLogger(__name__)
-
 class ChatbotService:
     def __init__(self):
         self.settings = get_settings()
@@ -30,7 +29,7 @@ class ChatbotService:
         
         # Check if the LLM tagged this as unrelated
         if "NOT_RESTAURANT_RELATED" in sql:
-            answer = "I'm sorry, but I can only answer questions related to restaurant operations, sales, stores, performance, and KPIs."
+            answer = "I'm sorry, but I can only answer questions related to Ocean View's restaurant operations, sales, stores, performance, and KPIs."
             memory_service.append_interaction(session_key, question, answer)
             return {
                 "sql": "N/A (Unrelated Question)",

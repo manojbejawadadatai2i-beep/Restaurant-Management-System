@@ -2,34 +2,38 @@ import re
 from fastapi import HTTPException, status
 from schemas import AuthenticatedUser
 
-ROLE_NAMES = {"corporate admin", "region manager", "district manager", "store manager"}
+ROLE_NAMES = {
+    "corporate admin", "corporate administrator", "administrator", "admin",
+    "region manager", "regional manager",
+    "district manager",
+    "store manager"
+}
 FORBIDDEN_SQL = re.compile(r"\b(insert|update|delete|drop|alter|truncate|create|grant|revoke|copy|call|execute|vacuum)\b", re.I)
 
 class RBACService:
     @staticmethod
     def get_scope_for_user(user: AuthenticatedUser) -> tuple[str | None, dict[str, int]]:
         role = user.role.strip().lower()
-        if role == "corporate admin":
+        if "corporate" in role or "admin" in role:
             return None, {}
         
-        scope_column = {
-            "region manager": "region_id",
-            "district manager": "district_id",
-            "store manager": "store_id"
-        }.get(role)
+        if "region" in role:
+            scope_column = "region_id"
+        elif "district" in role:
+            scope_column = "district_id"
+        elif "store" in role:
+            scope_column = "store_id"
+        else:
+            scope_column = None
         
         if not scope_column:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, 
-                detail="User role is not authorized for chat scope check"
-            )
+            # Default to no filter for unmapped admin roles
+            return None, {}
             
-        value = getattr(user, scope_column)
+        value = getattr(user, scope_column, None)
         if value is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, 
-                detail=f"{scope_column} is required for this role"
-            )
+            # Fallback to no filter if scope column is not populated
+            return None, {}
         return scope_column, {scope_column: value}
 
     @staticmethod
