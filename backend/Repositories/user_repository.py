@@ -91,8 +91,11 @@ class UserRepository:
         if user:
             user.role_id = role_id
             user.store_id = store_id
+            user.assigned_store_id = store_id
             user.district_id = district_id
+            user.assigned_district_id = district_id
             user.region_id = region_id
+            user.assigned_region_id = region_id
             if login_method is not None:
                 user.login_method = login_method
             db.commit()

@@ -129,6 +129,7 @@ export const rebuildKpiTablesAndAggregate = async () => {
 
   // 6. Seed raw orders & Level 0 store KPIs
   await seedStoreData();
+  await seedRealOrdersAndItems();
 
   // 7. Run Aggregation Function (Store -> District -> Region -> Corporate)
   await runCascadingAggregation();
@@ -140,7 +141,7 @@ async function seedStoreData() {
   
   const storesRes = await pool.query('SELECT id FROM stores ORDER BY id');
   const stores = storesRes.rows;
-  const dates = ['2026-07-14', '2026-07-15', '2026-07-16', '2026-07-17', '2026-07-18', '2026-07-19', '2026-07-20'];
+  const dates = ['2026-07-14', '2026-07-15', '2026-07-16', '2026-07-17', '2026-07-18', '2026-07-19', '2026-07-20', '2026-07-21'];
 
   for (const store of stores) {
     for (const dateStr of dates) {
@@ -186,6 +187,74 @@ async function seedStoreData() {
 
   const storeCountRes = await pool.query('SELECT COUNT(*) FROM daily_store_kpis');
   console.log(`   ✓ Seeded ${storeCountRes.rows[0].count} daily_store_kpis records.\n`);
+}
+
+// Seed real orders and order_items into PostgreSQL
+async function seedRealOrdersAndItems() {
+  console.log('6b. Truncating and seeding clean real orders into PostgreSQL...');
+  
+  await pool.query('TRUNCATE TABLE order_items, orders RESTART IDENTITY CASCADE;');
+
+  const storesRes = await pool.query('SELECT id FROM stores ORDER BY id');
+  const stores = storesRes.rows;
+  const dates = ['2026-07-14', '2026-07-15', '2026-07-16', '2026-07-17', '2026-07-18', '2026-07-19', '2026-07-20', '2026-07-21'];
+  
+  const customers = [
+    'Ananya Sharma', 'Rahul Verma', 'Priya Patel', 'Vikram Singh',
+    'Neha Gupta', 'Siddharth Malhotra', 'Deepika Rao', 'Amitabh Roy',
+    'Karan Johar', 'Meera Kapoor', 'Aditya Birla', 'Rohan Mehta'
+  ];
+
+  const menuRes = await pool.query('SELECT id, name, price FROM menu_items ORDER BY id');
+  const menuItems = menuRes.rows.length > 0 ? menuRes.rows : [
+    { id: 1, name: 'Seafood Platter', price: 1200 },
+    { id: 2, name: 'Garlic Butter Lobster', price: 1500 },
+    { id: 3, name: 'Grilled Salmon', price: 850 },
+    { id: 4, name: 'Clam Chowder Bowl', price: 350 },
+    { id: 5, name: 'Crispy Calamari', price: 450 }
+  ];
+
+  const hours = ['11:30', '13:15', '15:45', '18:20', '20:45'];
+
+  for (const store of stores) {
+    for (const dateStr of dates) {
+      for (let i = 0; i < hours.length; i++) {
+        const custName = customers[(store.id * 3 + i) % customers.length];
+        const status = i === 4 ? 'Cancelled' : i === 3 ? 'Pending' : 'Completed';
+        const timestamp = `${dateStr} ${hours[i]}:00`;
+
+        const item1 = menuItems[(store.id + i) % menuItems.length];
+        const item2 = menuItems[(store.id + i + 2) % menuItems.length];
+        const qty1 = 1 + (i % 2);
+        const qty2 = 1;
+        const totalAmt = (item1.price * qty1) + (item2.price * qty2);
+
+        const ordRes = await pool.query(`
+          INSERT INTO orders (store_id, customer_name, total_amount, status, created_at)
+          VALUES ($1, $2, $3, $4, $5)
+          RETURNING id;
+        `, [store.id, custName, totalAmt.toFixed(2), status, timestamp]);
+
+        const orderId = ordRes.rows[0].id;
+
+        await pool.query(`
+          INSERT INTO order_items (order_id, menu_item_id, quantity, price)
+          VALUES ($1, $2, $3, $4), ($1, $5, $6, $7);
+        `, [
+          orderId,
+          item1.id,
+          qty1,
+          item1.price,
+          item2.id,
+          qty2,
+          item2.price
+        ]);
+      }
+    }
+  }
+
+  const ordCount = await pool.query('SELECT COUNT(*) FROM orders');
+  console.log(`   ✓ Seeded ${ordCount.rows[0].count} real orders into PostgreSQL.\n`);
 }
 
 /**

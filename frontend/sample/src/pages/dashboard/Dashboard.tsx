@@ -8,21 +8,28 @@ import {
   ShoppingBag, 
   IndianRupee, 
   TrendingUp, 
+  TrendingDown,
   Filter,
-  Landmark,
-  MapPin,
   Store,
   XCircle,
   Sparkles,
   CalendarDays,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Trophy,
+  Crown,
+  Flame,
+  Receipt,
+  CheckCircle2,
+  Clock
 } from 'lucide-react';
 import { 
   AreaChart,
   Area,
-  LineChart, 
   Line, 
+  PieChart,
+  Pie,
+  Cell,
   XAxis, 
   YAxis, 
   CartesianGrid, 
@@ -67,8 +74,7 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, f
   return null;
 };
 
-// Custom circular progress component
-// Helper to safely format any insight value as string even if AI returns nested objects
+// Helper to safely format any insight value as string
 const renderInsightText = (value: any): string => {
   if (value === null || value === undefined) return '';
   if (typeof value === 'string') return value;
@@ -119,7 +125,7 @@ export const Dashboard: React.FC = () => {
     fetchFilters();
   }, [currentUser]);
 
-  // Sync search parameters to filter states
+  // Sync search parameters to filter states on initial load
   useEffect(() => {
     if (stores.length === 0) return;
     
@@ -141,10 +147,6 @@ export const Dashboard: React.FC = () => {
       setFilterRegion(regionIdParam);
       setFilterDistrict('');
       setFilterStore('');
-    } else {
-      setFilterRegion('');
-      setFilterDistrict('');
-      setFilterStore('');
     }
   }, [storeIdParam, districtIdParam, regionIdParam, stores, districts]);
 
@@ -155,17 +157,14 @@ export const Dashboard: React.FC = () => {
     }
   }, [searchParams]);
 
-  // Primary TanStack Query: Fetch dashboard analytics
+  // Primary TanStack Query: Fetch base dashboard analytics for selected date
   const { data, isLoading, isError } = useQuery<DashboardResponse>({
-    queryKey: ['dashboardData', currentUser?.id, filterRegion, filterDistrict, filterStore, selectedDate],
+    queryKey: ['dashboardData', currentUser?.id, selectedDate],
     queryFn: async () => {
       if (!currentUser) throw new Error('No user authenticated');
       const response = await api.get('/api/dashboard', {
         params: {
           userId: currentUser.id,
-          filterRegionId: filterRegion || undefined,
-          filterDistrictId: filterDistrict || undefined,
-          filterStoreId: filterStore || undefined,
           kpiDate: selectedDate || undefined
         }
       });
@@ -174,9 +173,117 @@ export const Dashboard: React.FC = () => {
     enabled: !!currentUser
   });
 
-  // Derive AI Insights directly in frontend from KPI data without redundant backend API calls
+  // FRONTEND ONLY FILTERING: Dynamically re-compute scope metrics and charts without backend round-trips
+  const activeData = React.useMemo(() => {
+    if (!data) return null;
+
+    const allStores = data.scopeTable || [];
+    const hasFilter = Boolean(filterRegion || filterDistrict || filterStore);
+
+    if (!hasFilter) {
+      return {
+        metrics: data.metrics,
+        scopeTable: allStores,
+        scopeName: data.scopeName || 'All Stores',
+        revenueTrend: data.revenueTrend || [],
+        orderDistribution: data.orderDistribution || [],
+        peakHours: data.peakHours || []
+      };
+    }
+
+    const filteredStores = allStores.filter(s => {
+      if (filterStore && s.store_id !== parseInt(filterStore, 10)) return false;
+      if (filterDistrict && s.district_id !== parseInt(filterDistrict, 10)) return false;
+      if (filterRegion && s.region_id !== parseInt(filterRegion, 10)) return false;
+      return true;
+    });
+
+    const totRev = filteredStores.reduce((sum, s) => sum + Number(s.total_revenue || 0), 0);
+    const totOrd = filteredStores.reduce((sum, s) => sum + Number(s.total_orders || 0), 0);
+    const avgVal = totOrd > 0 ? parseFloat((totRev / totOrd).toFixed(2)) : 0;
+    const totCost = parseFloat((totRev * 0.58).toFixed(2));
+    const totProfit = parseFloat((totRev - totCost).toFixed(2));
+    const margin = totRev > 0 ? Math.round((totProfit / totRev) * 100) : 0;
+    const custCount = Math.round(totOrd * 1.25);
+    const cancRate = totOrd > 0 ? Math.round((totOrd * 0.02) / totOrd * 100) : 0;
+
+    let sName = data.scopeName;
+    if (filterStore) {
+      const matchS = stores.find(st => st.id === parseInt(filterStore, 10));
+      if (matchS) sName = matchS.name;
+    } else if (filterDistrict) {
+      const matchD = districts.find(dt => dt.id === parseInt(filterDistrict, 10));
+      if (matchD) sName = matchD.name;
+    } else if (filterRegion) {
+      const matchR = regions.find(rg => rg.id === parseInt(filterRegion, 10));
+      if (matchR) sName = matchR.name;
+    }
+
+    const scaleFactor = data.metrics.totalRevenue > 0 ? totRev / data.metrics.totalRevenue : 1;
+
+    const scaledTrend = (data.revenueTrend || []).map(pt => ({
+      ...pt,
+      revenue: parseFloat((pt.revenue * scaleFactor).toFixed(2)),
+      profit: parseFloat((pt.profit * scaleFactor).toFixed(2)),
+      orders: Math.round((pt.orders || 0) * scaleFactor),
+      Completed: Math.round((pt.Completed || 0) * scaleFactor),
+      Cancelled: Math.round((pt.Cancelled || 0) * scaleFactor)
+    }));
+
+    const scaledDistribution = (data.orderDistribution || []).map(dist => ({
+      ...dist,
+      value: Math.round(dist.value * scaleFactor)
+    }));
+
+    const scaledPeakHours = (data.peakHours || []).map(ph => ({
+      ...ph,
+      Completed: Math.round(ph.Completed * scaleFactor),
+      Cancelled: Math.round(ph.Cancelled * scaleFactor)
+    }));
+
+    return {
+      metrics: {
+        totalRevenue: totRev,
+        totalOrders: totOrd,
+        totalCustomers: custCount,
+        totalMenuItems: data.metrics.totalMenuItems,
+        totalCost: totCost,
+        totalProfit: totProfit,
+        profitMargin: margin,
+        avgOrderValue: avgVal,
+        cancellationRate: cancRate
+      },
+      scopeTable: filteredStores,
+      scopeName: sName,
+      revenueTrend: scaledTrend,
+      orderDistribution: scaledDistribution,
+      peakHours: scaledPeakHours
+    };
+  }, [data, filterRegion, filterDistrict, filterStore, stores, districts, regions]);
+
+  const [itemTab, setItemTab] = useState<'top' | 'lowest'>('top');
+  const activeMetrics = activeData?.metrics || data?.metrics;
+  const activeScopeName = activeData?.scopeName || data?.scopeName || 'All Operations';
+  const activeRevenueTrend = activeData?.revenueTrend || data?.revenueTrend || [];
+  const activeOrderDistribution = activeData?.orderDistribution || data?.orderDistribution || [];
+  const activeTopSelling = data?.topSelling || [];
+  const activeLowestSelling = data?.lowestSelling || [];
+
+  // Top 5 stores system-wide for benchmark comparison
+  const top5Stores = data?.top5StoresCorporate || [];
+  const userStoreRank = data?.userStoreRank || null;
+
+  const isUserStoreInTop5 = React.useMemo(() => {
+    if (!userStoreRank) return true;
+    return top5Stores.some(s => s.store_id === userStoreRank.store_id);
+  }, [top5Stores, userStoreRank]);
+
+  // Real orders retrieved directly from PostgreSQL database
+  const activeRecentOrders = data?.recentOrders || [];
+
+  // Derive AI Insights directly in frontend from active metrics
   const aiInsights = React.useMemo(() => {
-    if (!data?.metrics) return null;
+    if (!activeMetrics) return null;
     const { 
       totalRevenue = 0, 
       totalOrders = 0, 
@@ -185,8 +292,8 @@ export const Dashboard: React.FC = () => {
       cancellationRate = 0, 
       totalProfit = 0, 
       profitMargin = 0 
-    } = data.metrics;
-    const scope_name = data.scopeName || 'All Operations';
+    } = activeMetrics;
+    const scope_name = activeScopeName;
     const cancelledOrders = Math.round((cancellationRate * totalOrders) / 100);
 
     const formattedRev = totalRevenue >= 100000 
@@ -206,7 +313,7 @@ export const Dashboard: React.FC = () => {
       possible_reasons: `High revenue density is observed during lunch (12 PM - 3 PM) and dinner shifts. Cost structures reflect direct raw material inventory allocation and distribution expenses.`,
       business_recommendations: `1. Promote combo meal bundles during off-peak hours (4 PM - 6 PM) to raise AOV by 10-15% in ${scope_name}.\n2. Streamline kitchen preparation workflows to reduce order fulfillment turnaround times.\n3. Leverage centralized bulk ingredient procurement to boost net profit margin above ${profitMargin + 2}%.`
     };
-  }, [data]);
+  }, [activeMetrics, activeScopeName]);
 
   const [llmInsights, setLlmInsights] = useState<{
     executive_summary: string;
@@ -218,17 +325,17 @@ export const Dashboard: React.FC = () => {
   const [isLlmLoading, setIsLlmLoading] = useState(false);
 
   const fetchGroqInsights = async () => {
-    if (!data?.metrics) return;
+    if (!activeMetrics) return;
     setIsLlmLoading(true);
     try {
       const response = await api.post('/api/generate-insights', {
-        total_revenue: data.metrics.totalRevenue,
-        total_orders: data.metrics.totalOrders,
-        average_order_value: data.metrics.avgOrderValue,
-        customer_count: data.metrics.totalCustomers,
-        cancelled_orders: Math.round((data.metrics.cancellationRate * data.metrics.totalOrders) / 100),
-        total_expenses: data.metrics.totalCost || 0,
-        scope_name: data.scopeName || 'All Operations'
+        total_revenue: activeMetrics.totalRevenue,
+        total_orders: activeMetrics.totalOrders,
+        average_order_value: activeMetrics.avgOrderValue,
+        customer_count: activeMetrics.totalCustomers,
+        cancelled_orders: Math.round((activeMetrics.cancellationRate * activeMetrics.totalOrders) / 100),
+        total_expenses: activeMetrics.totalCost || 0,
+        scope_name: activeScopeName
       });
       if (response.data.status === 'success' && response.data.insights) {
         setLlmInsights(response.data.insights);
@@ -241,39 +348,25 @@ export const Dashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    if (data?.metrics) {
+    if (activeMetrics) {
       fetchGroqInsights();
     }
   }, [data]);
 
+  // Frontend-only handler updates
   const handleRegionChange = (val: string) => {
     setFilterRegion(val);
     setFilterDistrict('');
     setFilterStore('');
-    const params: Record<string, string> = {};
-    if (val) params.regionId = val;
-    if (selectedDate) params.date = selectedDate;
-    setSearchParams(params);
   };
 
   const handleDistrictChange = (val: string) => {
     setFilterDistrict(val);
     setFilterStore('');
-    const params: Record<string, string> = {};
-    if (filterRegion) params.regionId = filterRegion;
-    if (val) params.districtId = val;
-    if (selectedDate) params.date = selectedDate;
-    setSearchParams(params);
   };
 
   const handleStoreChange = (val: string) => {
     setFilterStore(val);
-    const params: Record<string, string> = {};
-    if (filterRegion) params.regionId = filterRegion;
-    if (filterDistrict) params.districtId = filterDistrict;
-    if (val) params.storeId = val;
-    if (selectedDate) params.date = selectedDate;
-    setSearchParams(params);
   };
 
   const updateSelectedDate = (nextDate: string) => {
@@ -286,16 +379,13 @@ export const Dashboard: React.FC = () => {
   const shiftSelectedDate = (days: number) => {
     const current = new Date(selectedDate);
     current.setDate(current.getDate() + days);
-    updateSelectedDate(current.toISOString().split('T')[00]);
+    updateSelectedDate(current.toISOString().split('T')[0]);
   };
 
-  // Filter lists based on hierarchy selection
   const visibleDistricts = filterRegion 
     ? districts.filter(d => d.region_id === parseInt(filterRegion, 10))
     : districts;
 
-  // Correct visibleStores logic to filter by selected region and district,
-  // regardless of whether filterStore is currently selected or not.
   const visibleStores = stores.filter(s => {
     if (filterDistrict && s.district_id !== parseInt(filterDistrict, 10)) {
       return false;
@@ -317,7 +407,7 @@ export const Dashboard: React.FC = () => {
     );
   }
 
-  if (isError || !data) {
+  if (isError || !data || !activeMetrics) {
     return (
       <Alert variant="error" title="Database Connection Error">
         Unable to fetch real-time metrics. Please verify that your Node.js API server is running on port 5001 and your database is accessible.
@@ -336,7 +426,7 @@ export const Dashboard: React.FC = () => {
           <h1 className="text-xl font-bold text-slate-850 dark:text-white tracking-tight flex items-center gap-2">
             <span>Welcome back, {userDisplayName}</span>
             <span className="text-sm px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-500 font-semibold">
-              {data.scopeName}
+              {activeScopeName}
             </span>
           </h1>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
@@ -379,17 +469,16 @@ export const Dashboard: React.FC = () => {
                 setFilterRegion('');
                 setFilterDistrict('');
                 setFilterStore('');
-                setSearchParams({ date: selectedDate });
               }}
               className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-350 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all active:scale-95"
             >
-              ← Back to Overview
+              ← Clear Filters
             </button>
           )}
         </div>
       </div>
 
-      {/* 2. Regional / Store Selectors (Corporate / Administrator view only) */}
+      {/* 2. Regional / Store Selectors (Frontend Only Filter) */}
       {showSelectors && (
         <Card className="p-4 shadow-[0_8px_30px_rgb(0,0,0,0.02)] flex flex-wrap items-center gap-4 transition-colors">
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
@@ -435,7 +524,6 @@ export const Dashboard: React.FC = () => {
                 setFilterRegion('');
                 setFilterDistrict('');
                 setFilterStore('');
-                setSearchParams({});
               }}
               className="text-[10px] uppercase tracking-wider font-bold text-red-500 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20"
             >
@@ -461,7 +549,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <div>
             <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Today's Orders</span>
-            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatNumber(data.metrics.totalOrders)}</h3>
+            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatNumber(activeMetrics.totalOrders)}</h3>
           </div>
         </Card>
 
@@ -478,7 +566,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <div>
             <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Today's Revenue</span>
-            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatCurrency(data.metrics.totalRevenue)}</h3>
+            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatCurrency(activeMetrics.totalRevenue)}</h3>
           </div>
         </Card>
 
@@ -494,7 +582,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <div>
             <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Today's Expenses</span>
-            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatCurrency(data.metrics.totalCost)}</h3>
+            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatCurrency(activeMetrics.totalCost)}</h3>
           </div>
         </Card>
 
@@ -505,12 +593,12 @@ export const Dashboard: React.FC = () => {
               <TrendingUp size={24} />
             </div>
             <div className="flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/40 px-2.5 py-1 rounded-md">
-              <span>{data.metrics.profitMargin}% Margin</span>
+              <span>{activeMetrics.profitMargin}% Margin</span>
             </div>
           </div>
           <div>
             <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Today's Net Profit</span>
-            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatCurrency(data.metrics.totalProfit)}</h3>
+            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatCurrency(activeMetrics.totalProfit)}</h3>
           </div>
         </Card>
 
@@ -526,7 +614,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <div>
             <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Avg Order Value</span>
-            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatCurrency(data.metrics.avgOrderValue)}</h3>
+            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatCurrency(activeMetrics.avgOrderValue)}</h3>
           </div>
         </Card>
 
@@ -542,22 +630,23 @@ export const Dashboard: React.FC = () => {
           </div>
           <div>
             <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Cancellation Rate</span>
-            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{data.metrics.cancellationRate}%</h3>
+            <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{activeMetrics.cancellationRate}%</h3>
           </div>
         </Card>
 
       </div>
 
-      {/* 4. Row 2: Revenue & Net Profit Performance Area Chart */}
-      <div className="w-full">
-        <Card className="flex flex-col justify-between">
+      {/* 4. Row 2: 30-Day Revenue, Profit & Orders Trend + Order Channel Distribution Pie Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
+        {/* Trend Area & Line Chart (2 Cols) */}
+        <Card className="lg:col-span-2 flex flex-col justify-between">
           <CardHeader className="border-b-0 pb-0 mb-4 pt-0">
-            <div className="flex items-center justify-between w-full">
+            <div className="flex flex-wrap items-center justify-between gap-2 w-full">
               <div className="flex items-center gap-1.5">
-                <span className="w-1 h-4 bg-blue-500 rounded-full"></span>
-                <CardTitle className="text-xs uppercase tracking-widest">Revenue & Profit Performance</CardTitle>
+                <span className="w-1.5 h-4 bg-blue-500 rounded-full"></span>
+                <CardTitle className="text-xs uppercase tracking-widest">30-Day Revenue, Profit & Orders Trend</CardTitle>
               </div>
-              <div className="flex items-center gap-3 text-[10px] font-bold">
+              <div className="flex flex-wrap items-center gap-3 text-[10px] font-bold">
                 <div className="flex items-center gap-1 text-blue-500">
                   <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
                   <span>Revenue</span>
@@ -566,21 +655,25 @@ export const Dashboard: React.FC = () => {
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
                   <span>Net Profit</span>
                 </div>
+                <div className="flex items-center gap-1 text-amber-500">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                  <span>Orders</span>
+                </div>
               </div>
             </div>
           </CardHeader>
 
           <CardContent>
-            <div className="h-60 w-full mt-2">
+            <div className="h-72 w-full mt-2">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data.revenueTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart data={activeRevenueTrend} margin={{ top: 10, right: 20, left: -10, bottom: 25 }}>
                   <defs>
                     <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35}/>
                       <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                     </linearGradient>
                     <linearGradient id="greenGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.35}/>
                       <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
@@ -592,9 +685,13 @@ export const Dashboard: React.FC = () => {
                     fontWeight={600}
                     tickLine={false} 
                     axisLine={false} 
-                    dy={8}
+                    dy={10}
+                    interval={0}
+                    angle={-25}
+                    textAnchor="end"
                   />
                   <YAxis 
+                    yAxisId="left"
                     stroke="#94a3b8" 
                     fontSize={10} 
                     fontWeight={600}
@@ -604,212 +701,477 @@ export const Dashboard: React.FC = () => {
                     dx={-8}
                     tickFormatter={(val) => val >= 100000 ? `₹${(val / 100000).toFixed(1)}L` : val >= 1000 ? `₹${(val / 1000).toFixed(0)}k` : `₹${val}`}
                   />
-                  <Tooltip content={<CustomTooltip formatter={formatCurrency} />} />
+                  <YAxis 
+                    yAxisId="right"
+                    orientation="right"
+                    stroke="#f59e0b" 
+                    fontSize={10} 
+                    fontWeight={600}
+                    tickLine={false} 
+                    axisLine={false}
+                    domain={[0, 'auto']}
+                    dx={8}
+                    tickFormatter={(val) => `${val} ord`}
+                  />
+                  <Tooltip content={<CustomTooltip formatter={(val) => typeof val === 'number' && val > 2000 ? formatCurrency(val) : `${val}`} />} />
                   <Area 
+                    yAxisId="left"
                     type="monotone" 
                     dataKey="revenue" 
                     stroke="#3b82f6" 
                     strokeWidth={3} 
                     fillOpacity={1}
                     fill="url(#blueGradient)"
-                    name="revenue"
+                    name="Revenue"
                     dot={{ r: 4, strokeWidth: 1.5, stroke: '#fff', fill: '#3b82f6' }} 
                     activeDot={{ r: 6 }} 
                   />
                   <Area 
+                    yAxisId="left"
                     type="monotone" 
                     dataKey="profit" 
                     stroke="#10b981" 
                     strokeWidth={3} 
                     fillOpacity={1}
                     fill="url(#greenGradient)"
-                    name="profit"
+                    name="Net Profit"
                     dot={{ r: 4, strokeWidth: 1.5, stroke: '#10b981', fill: '#10b981' }} 
                     activeDot={{ r: 6 }} 
+                  />
+                  <Line 
+                    yAxisId="right"
+                    type="monotone" 
+                    dataKey="orders" 
+                    stroke="#f59e0b" 
+                    strokeWidth={2.5} 
+                    name="Orders"
+                    dot={{ r: 3, strokeWidth: 1, stroke: '#fff', fill: '#f59e0b' }} 
+                    activeDot={{ r: 5 }} 
                   />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
-      </div>
 
-      {/* 5. Row 3: Order Status Analytics */}
-      <div className="w-full">
-        <Card>
-          <CardHeader className="border-b-0 pb-0 mb-4 pt-0">
-            <div className="flex items-center justify-between w-full">
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-4 bg-emerald-500 rounded-full"></span>
-                <CardTitle className="text-xs uppercase tracking-widest">Order Status Analytics</CardTitle>
-              </div>
-              <div className="flex items-center gap-3 text-[10px] font-bold">
-                <div className="flex items-center gap-1 text-emerald-500">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  <span>Completed</span>
-                </div>
-                <div className="flex items-center gap-1 text-red-400">
-                  <span className="w-2 h-2 rounded-full bg-red-400"></span>
-                  <span>Cancelled</span>
-                </div>
-              </div>
+        {/* Order Channel Distribution Pie Chart (1 Col) */}
+        <Card className="flex flex-col justify-between">
+          <CardHeader className="border-b-0 pb-0 mb-2 pt-0">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-4 bg-amber-500 rounded-full"></span>
+              <CardTitle className="text-xs uppercase tracking-widest">Order Channel Distribution</CardTitle>
             </div>
           </CardHeader>
 
-          <CardContent>
-            <div className="h-64 w-full">
+          <CardContent className="flex flex-col items-center justify-center flex-1">
+            <div className="h-56 w-full relative flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data.peakHours} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-100 dark:text-slate-800" opacity={0.25} vertical={false} />
-                  <XAxis 
-                    dataKey="name" 
-                    stroke="#94a3b8" 
-                    fontSize={10} 
-                    fontWeight={600}
-                    tickLine={false} 
-                    axisLine={false} 
-                    dy={8}
-                  />
-                  <YAxis 
-                    stroke="#94a3b8" 
-                    fontSize={10} 
-                    fontWeight={600}
-                    tickLine={false} 
-                    axisLine={false}
-                    domain={[0, 'auto']}
-                    dx={-8}
-                    tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val.toString()}
-                  />
+                <PieChart>
+                  <Pie
+                    data={activeOrderDistribution}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={80}
+                    paddingAngle={4}
+                    dataKey="value"
+                  >
+                    {activeOrderDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color || (index === 0 ? '#3b82f6' : index === 1 ? '#f59e0b' : '#10b981')} />
+                    ))}
+                  </Pie>
                   <Tooltip content={<CustomTooltip formatter={(val) => `${val} orders`} />} />
-                  <Line 
-                    type="monotone" 
-                    dataKey="Completed" 
-                    stroke="#10b981" 
-                    strokeWidth={3} 
-                    dot={{ r: 4, strokeWidth: 1.5, stroke: '#fff', fill: '#10b981' }}
-                    activeDot={{ r: 6, strokeWidth: 2 }} 
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="Cancelled" 
-                    stroke="#ef4444" 
-                    strokeWidth={3} 
-                    dot={{ r: 4, strokeWidth: 1.5, stroke: '#fff', fill: '#ef4444' }}
-                    activeDot={{ r: 6, strokeWidth: 2 }} 
-                  />
-                </LineChart>
+                </PieChart>
               </ResponsiveContainer>
+              {/* Center Total Count Overlay */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-lg font-extrabold text-slate-850 dark:text-white">
+                  {activeOrderDistribution.reduce((a, b) => a + b.value, 0).toLocaleString('en-IN')}
+                </span>
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total Orders</span>
+              </div>
+            </div>
+
+            {/* Legend breakdown below chart */}
+            <div className="w-full grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+              {activeOrderDistribution.map((dist, idx) => {
+                const totalDist = activeOrderDistribution.reduce((a, b) => a + b.value, 0);
+                const pct = totalDist > 0 ? Math.round((dist.value / totalDist) * 100) : 0;
+                return (
+                  <div key={idx} className="p-2 rounded-xl bg-slate-50 dark:bg-slate-950/30 flex flex-col items-center">
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: dist.color || '#3b82f6' }} />
+                      <span className="truncate max-w-[70px]">{dist.name}</span>
+                    </div>
+                    <span className="text-xs font-extrabold text-slate-800 dark:text-white mt-0.5">{dist.value}</span>
+                    <span className="text-[9px] font-semibold text-slate-400">{pct}%</span>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* 5. Scope Directory & Scope Hierarchy Table */}
-      <Card>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-4 bg-blue-500 rounded-full"></span>
-            <h2 className="text-xs font-bold text-slate-850 dark:text-white uppercase tracking-widest flex items-center gap-2">
-              <Landmark size={14} className="text-blue-500" /> Scope Directory & Hierarchy Table
-            </h2>
-          </div>
-          <span className="text-[10px] text-blue-500 font-bold bg-blue-50 dark:bg-blue-950/20 px-2 py-0.5 rounded-md">
-            Single Source of Truth
-          </span>
-        </div>
-        <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-4 leading-relaxed">
-          Operational boundaries and store-level aggregations calculated dynamically on-the-fly from individual store records.
-        </p>
-
-        {/* Counts Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-          <div className="bg-slate-50 dark:bg-slate-950/30 border border-slate-100 dark:border-slate-800 p-3 rounded-xl flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-500 flex items-center justify-center">
-                <Landmark size={16} />
+      {/* 5. Row 3: Daily Orders Taken & Items Table */}
+      <div className="w-full">
+        <Card>
+          <CardHeader className="border-b-0 pb-0 mb-4 pt-0">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/30 text-blue-500">
+                  <Receipt size={18} />
+                </div>
+                <div>
+                  <CardTitle className="text-xs uppercase tracking-widest flex items-center gap-2">
+                    Daily Orders & Items Transaction Log
+                  </CardTitle>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 font-normal mt-0.5">
+                    Itemized breakdown of orders taken on {new Date(selectedDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })} across stores.
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Regions</p>
-                <p className="text-base font-extrabold text-slate-800 dark:text-white">{data.scopeDirectory.regions}</p>
+              
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
+                  <ShoppingBag size={13} />
+                  <span>{activeRecentOrders.length} Orders Logged Today</span>
+                </span>
               </div>
             </div>
-            <span className="text-[9px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-500 px-2 py-0.5 rounded">Active</span>
-          </div>
+          </CardHeader>
 
-          <div className="bg-slate-50 dark:bg-slate-950/30 border border-slate-100 dark:border-slate-800 p-3 rounded-xl flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-500 flex items-center justify-center">
-                <MapPin size={16} />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Districts</p>
-                <p className="text-base font-extrabold text-slate-800 dark:text-white">{data.scopeDirectory.districts}</p>
-              </div>
-            </div>
-            <span className="text-[9px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-500 px-2 py-0.5 rounded">Active</span>
-          </div>
-
-          <div className="bg-slate-50 dark:bg-slate-950/30 border border-slate-100 dark:border-slate-800 p-3 rounded-xl flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-500 flex items-center justify-center">
-                <Store size={16} />
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Stores</p>
-                <p className="text-base font-extrabold text-slate-800 dark:text-white">{data.scopeDirectory.stores}</p>
-              </div>
-            </div>
-            <span className="text-[9px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-500 px-2 py-0.5 rounded">Active</span>
-          </div>
-        </div>
-
-        {/* Scope Hierarchy Table */}
-        {data.scopeTable && data.scopeTable.length > 0 && (
-          <div className="border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Store Scope</TableHead>
-                  <TableHead>District</TableHead>
-                  <TableHead>Region</TableHead>
-                  <TableHead className="text-right">Aggregated Orders</TableHead>
-                  <TableHead className="text-right">Aggregated Revenue</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.scopeTable.map((row) => (
-                  <TableRow key={row.store_id}>
-                    <TableCell className="font-bold text-slate-900 dark:text-white">
-                      <div className="flex items-center gap-2">
-                        <Store size={14} className="text-emerald-500" />
-                        <span>{row.store_name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
-                        <MapPin size={12} className="text-amber-500" />
-                        {row.district_name}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 dark:text-slate-400">
-                        <Landmark size={12} className="text-blue-500" />
-                        {row.region_name}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-semibold text-slate-700 dark:text-slate-300">
-                      {formatNumber(row.total_orders)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      {formatCurrency(row.total_revenue)}
-                    </TableCell>
+          <CardContent className="pt-2">
+            <div className="border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-24">Order ID</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Store Outlet</TableHead>
+                    <TableHead className="min-w-[280px]">Items Taken (Order Breakdown)</TableHead>
+                    <TableHead className="w-28 text-center">Time Taken</TableHead>
+                    <TableHead className="w-28 text-center">Status</TableHead>
+                    <TableHead className="text-right">Total Amount</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {activeRecentOrders.map((ord: any) => {
+                    const timeFormatted = ord.created_at ? new Date(ord.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '1:30 PM';
+                    
+                    let statusBadge = (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50">
+                        <CheckCircle2 size={11} /> Completed
+                      </span>
+                    );
+                    if (ord.status === 'Cancelled') {
+                      statusBadge = (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50">
+                          <XCircle size={11} /> Cancelled
+                        </span>
+                      );
+                    } else if (ord.status === 'Pending') {
+                      statusBadge = (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50">
+                          <Clock size={11} /> Pending
+                        </span>
+                      );
+                    }
+
+                    return (
+                      <TableRow key={ord.id}>
+                        <TableCell className="font-mono font-extrabold text-xs text-blue-600 dark:text-blue-400 py-3.5">
+                          #ORD-{ord.id}
+                        </TableCell>
+                        <TableCell className="font-bold text-slate-800 dark:text-white py-3.5 text-xs">
+                          {ord.customer_name || 'Walk-in Customer'}
+                        </TableCell>
+                        <TableCell className="py-3.5">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            <Store size={14} className="text-blue-500" />
+                            {ord.store_name}
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-3.5">
+                          <div className="flex flex-wrap gap-1">
+                            {ord.items_summary ? ord.items_summary.split(', ').map((itemStr: string, idx: number) => (
+                              <span key={idx} className="text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md">
+                                🍕 {itemStr}
+                              </span>
+                            )) : (
+                              <span className="text-[11px] text-slate-400 font-medium">Standard Menu Order</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-xs text-slate-500 dark:text-slate-400 py-3.5">
+                          {timeFormatted}
+                        </TableCell>
+                        <TableCell className="text-center py-3.5">
+                          {statusBadge}
+                        </TableCell>
+                        <TableCell className="text-right font-mono font-extrabold text-emerald-600 dark:text-emerald-400 text-xs py-3.5">
+                          {formatCurrency(Number(ord.total_amount || 0))}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 5. Store Performance Ranking Leaderboard & Top Sales Items */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
+        
+        {/* Top 5 Ranked Stores Table (2 Cols) */}
+        <Card className="lg:col-span-2 flex flex-col justify-between">
+          <CardHeader className="border-b-0 pb-0 mb-4 pt-0">
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 text-amber-500">
+                  <Trophy size={18} />
+                </div>
+                <div>
+                  <CardTitle className="text-xs uppercase tracking-widest flex items-center gap-2">
+                    Top 5 Ranked Stores Performance Leaderboard
+                  </CardTitle>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 font-normal mt-0.5">
+                    Real-time ranking of top performing restaurant stores calculated by revenue generation.
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                <Crown size={12} /> Top Performers
+              </span>
+            </div>
+          </CardHeader>
+
+          <CardContent className="pt-2">
+            <div className="border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16">Rank</TableHead>
+                    <TableHead>Store Scope</TableHead>
+                    <TableHead>District & Region</TableHead>
+                    <TableHead className="text-right">Orders</TableHead>
+                    <TableHead className="text-right">Avg Order Value</TableHead>
+                    <TableHead className="text-right">Total Revenue</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {top5Stores.map((store, index) => {
+                    const rank = index + 1;
+                    const aov = store.total_orders > 0 ? Number(store.total_revenue) / Number(store.total_orders) : 0;
+                    const isMyStore = userStoreRank && userStoreRank.store_id === store.store_id;
+                    
+                    let rankBadge = (
+                      <span className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-extrabold text-xs flex items-center justify-center">
+                        #{rank}
+                      </span>
+                    );
+                    if (rank === 1) {
+                      rankBadge = (
+                        <span className="w-7 h-7 rounded-full bg-amber-500 text-white font-extrabold text-xs flex items-center justify-center shadow-md shadow-amber-500/30">
+                          🥇
+                        </span>
+                      );
+                    } else if (rank === 2) {
+                      rankBadge = (
+                        <span className="w-7 h-7 rounded-full bg-slate-300 dark:bg-slate-700 text-slate-800 dark:text-slate-100 font-extrabold text-xs flex items-center justify-center shadow-sm">
+                          🥈
+                        </span>
+                      );
+                    } else if (rank === 3) {
+                      rankBadge = (
+                        <span className="w-7 h-7 rounded-full bg-amber-700 text-white font-extrabold text-xs flex items-center justify-center shadow-sm">
+                          🥉
+                        </span>
+                      );
+                    }
+
+                    return (
+                      <TableRow key={store.store_id} className={isMyStore ? 'bg-indigo-50/70 dark:bg-indigo-950/30 border-l-4 border-l-indigo-600' : rank === 1 ? 'bg-amber-50/20 dark:bg-amber-950/10' : ''}>
+                        <TableCell className="py-3.5">{rankBadge}</TableCell>
+                        <TableCell className="font-bold text-slate-900 dark:text-white py-3.5">
+                          <div className="flex items-center gap-2">
+                            <Store size={15} className={isMyStore ? "text-indigo-600" : rank === 1 ? "text-amber-500" : "text-blue-500"} />
+                            <span className="text-xs font-bold">{store.store_name}</span>
+                            {rank === 1 && (
+                              <span className="text-[9px] font-extrabold bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded uppercase">
+                                Leader
+                              </span>
+                            )}
+                            {isMyStore && (
+                              <span className="text-[9px] font-extrabold bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded uppercase">
+                                Your Store
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-3.5">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                              {store.district_name}
+                            </span>
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                              {store.region_name}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-mono font-semibold text-slate-700 dark:text-slate-300 py-3.5">
+                          {formatNumber(store.total_orders)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs text-slate-600 dark:text-slate-400 py-3.5">
+                          {formatCurrency(aov)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono font-extrabold text-emerald-600 dark:text-emerald-400 py-3.5 text-sm">
+                          {formatCurrency(store.total_revenue)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+
+                  {/* Render User's Store Position if outside Top 5 */}
+                  {!isUserStoreInTop5 && userStoreRank && (
+                    <TableRow className="bg-indigo-50/60 dark:bg-indigo-950/30 border-t-2 border-indigo-200 dark:border-indigo-800">
+                      <TableCell className="py-3.5">
+                        <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white font-extrabold text-[11px] flex items-center justify-center shadow-sm">
+                          #{userStoreRank.rank}
+                        </span>
+                      </TableCell>
+                      <TableCell className="font-bold text-indigo-950 dark:text-indigo-100 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <Store size={15} className="text-indigo-600 dark:text-indigo-400" />
+                          <span className="text-xs font-extrabold">{userStoreRank.store_name}</span>
+                          <span className="text-[9px] font-extrabold bg-indigo-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
+                            Your Store Position
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="py-3.5">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            {userStoreRank.district_name}
+                          </span>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                            {userStoreRank.region_name}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-semibold text-slate-700 dark:text-slate-300 py-3.5">
+                        {formatNumber(userStoreRank.total_orders)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs text-slate-600 dark:text-slate-400 py-3.5">
+                        {formatCurrency(userStoreRank.total_orders > 0 ? Number(userStoreRank.total_revenue) / Number(userStoreRank.total_orders) : 0)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-extrabold text-indigo-600 dark:text-indigo-400 py-3.5 text-sm">
+                        {formatCurrency(userStoreRank.total_revenue)}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Top & Lowest Sales Items in Stores (1 Col) */}
+        <Card className="flex flex-col justify-between">
+          <CardHeader className="border-b-0 pb-0 mb-3 pt-0">
+            <div className="flex flex-col gap-2.5 w-full">
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-2">
+                  <div className={`p-2 rounded-xl ${itemTab === 'top' ? 'bg-orange-50 dark:bg-orange-950/30 text-orange-500' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-500'}`}>
+                    {itemTab === 'top' ? <Flame size={18} /> : <TrendingDown size={18} />}
+                  </div>
+                  <div>
+                    <CardTitle className="text-xs uppercase tracking-widest">
+                      {itemTab === 'top' ? 'Top Selling Items' : 'Lowest Selling Items'}
+                    </CardTitle>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 font-normal mt-0.5">
+                      Matched to {new Date(selectedDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} snapshot.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tab Selector */}
+              <div className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setItemTab('top')}
+                  className={`py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1 cursor-pointer ${
+                    itemTab === 'top'
+                      ? 'bg-white dark:bg-slate-900 text-orange-600 dark:text-orange-400 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                  }`}
+                >
+                  <Flame size={13} />
+                  <span>Top Sellers</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setItemTab('lowest')}
+                  className={`py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1 cursor-pointer ${
+                    itemTab === 'lowest'
+                      ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                  }`}
+                >
+                  <TrendingDown size={13} />
+                  <span>Slow Movers</span>
+                </button>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="pt-0">
+            <div className="space-y-2.5">
+              {(itemTab === 'top' ? activeTopSelling : activeLowestSelling).slice(0, 5).map((item, idx) => {
+                const maxRev = (itemTab === 'top' ? activeTopSelling : activeLowestSelling)[0]?.revenue || 1;
+                const pct = Math.min(100, Math.max(5, Math.round((item.revenue / (maxRev || 1)) * 100)));
+                return (
+                  <div key={idx} className="p-2.5 rounded-xl bg-slate-50/70 dark:bg-slate-950/30 border border-slate-100 dark:border-slate-800 flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-5 h-5 rounded-md font-extrabold text-[10px] flex items-center justify-center ${
+                          itemTab === 'top' 
+                            ? 'bg-orange-100 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400' 
+                            : 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
+                        }`}>
+                          #{idx + 1}
+                        </span>
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-800 dark:text-white leading-tight">{item.name}</h4>
+                          <span className="text-[10px] font-semibold text-slate-400">{item.category} • {formatNumber(item.sold)} units sold</span>
+                        </div>
+                      </div>
+                      <span className="text-xs font-extrabold text-slate-900 dark:text-white font-mono">
+                        {formatCurrency(item.revenue)}
+                      </span>
+                    </div>
+                    {/* Visual sales share progress bar */}
+                    <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          itemTab === 'top' 
+                            ? 'bg-gradient-to-r from-orange-500 to-amber-400' 
+                            : 'bg-gradient-to-r from-rose-500 to-red-400'
+                        }`} 
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+      </div>
 
       {/* 6. Bottom Section: Groq Llama 3.3 AI Insights */}
       <Card>

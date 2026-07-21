@@ -80,11 +80,22 @@ export interface DashboardMetrics {
   cancellationRate: number;
 }
 
-// Revenue Trend structure for Recharts Line Chart
+// Revenue Trend structure for Recharts Line/Area Chart
 export interface RevenueTrendPoint {
   name: string;
+  fullDate?: string;
   revenue: number;
   profit: number;
+  orders?: number;
+  Completed?: number;
+  Cancelled?: number;
+}
+
+// Order Distribution structure for Recharts Pie Chart
+export interface OrderDistributionPoint {
+  name: string;
+  value: number;
+  color?: string;
 }
 
 // Peak Hours structure for Recharts Bar Chart
@@ -143,10 +154,14 @@ export interface DashboardResponse {
   metrics: DashboardMetrics;
   scopeDirectory: ScopeDirectory;
   scopeTable?: ScopeTableRow[];
+  top5StoresCorporate?: ScopeTableRow[];
+  userStoreRank?: ScopeTableRow & { rank: number };
   staff: StaffMember[];
   revenueTrend: RevenueTrendPoint[];
   peakHours: PeakHoursPoint[];
+  orderDistribution?: OrderDistributionPoint[];
   topSelling: TopSellingItem[];
+  lowestSelling?: TopSellingItem[];
   recentOrders: RecentOrderRow[];
 }
 

@@ -5,6 +5,9 @@ from models import User, Store, District, Region, KPI, DistrictKPI, RegionKPI, C
 
 logger = logging.getLogger(__name__)
 
+# Cost ratio used to derive profit from revenue
+_COST_RATIO = 0.58
+
 class DashboardRepository:
     @staticmethod
     def get_latest_kpi_date(db: Session) -> str:
@@ -86,6 +89,92 @@ class DashboardRepository:
             "cancelled_orders": cancelled_orders,
             "average_order_value": average_order_value
         }
+
+    @staticmethod
+    def get_daily_revenue_trend(db: Session, scope_type: str, scope_id) -> list:
+        """
+        Returns the last 30 days of real daily KPI data for the resolved scope.
+        Each item: { name: 'Jun 21', revenue: float, profit: float,
+                     completed: int, cancelled: int }
+        """
+        rows = []
+
+        if scope_type == 'store' and scope_id is not None:
+            sql = text("""
+                SELECT kpi_date,
+                       COALESCE(total_revenue, 0)    AS revenue,
+                       COALESCE(total_orders, 0)     AS total_orders,
+                       COALESCE(cancelled_orders, 0) AS cancelled_orders
+                FROM daily_store_kpis
+                WHERE store_id = :sid
+                ORDER BY kpi_date ASC
+                LIMIT 30
+            """)
+            rows = db.execute(sql, {"sid": scope_id}).mappings().all()
+
+        elif scope_type == 'district' and scope_id is not None:
+            sql = text("""
+                SELECT kpi_date,
+                       COALESCE(total_revenue, 0)    AS revenue,
+                       COALESCE(total_orders, 0)     AS total_orders,
+                       COALESCE(cancelled_orders, 0) AS cancelled_orders
+                FROM district_kpis
+                WHERE district_id = :did
+                ORDER BY kpi_date ASC
+                LIMIT 30
+            """)
+            rows = db.execute(sql, {"did": scope_id}).mappings().all()
+
+        elif scope_type == 'region' and scope_id is not None:
+            sql = text("""
+                SELECT kpi_date,
+                       COALESCE(total_revenue, 0)    AS revenue,
+                       COALESCE(total_orders, 0)     AS total_orders,
+                       COALESCE(cancelled_orders, 0) AS cancelled_orders
+                FROM region_kpis
+                WHERE region_id = :rid
+                ORDER BY kpi_date ASC
+                LIMIT 30
+            """)
+            rows = db.execute(sql, {"rid": scope_id}).mappings().all()
+
+        else:
+            # Corporate: aggregate all regions per date
+            sql = text("""
+                SELECT kpi_date,
+                       SUM(total_revenue)    AS revenue,
+                       SUM(total_orders)     AS total_orders,
+                       SUM(cancelled_orders) AS cancelled_orders
+                FROM region_kpis
+                GROUP BY kpi_date
+                ORDER BY kpi_date ASC
+                LIMIT 30
+            """)
+            rows = db.execute(sql).mappings().all()
+
+        result = []
+        for r in rows:
+            rev = float(r["revenue"] or 0)
+            total_ord = int(r["total_orders"] or 0)
+            cancelled = int(r["cancelled_orders"] or 0)
+            profit = round(rev * (1 - _COST_RATIO), 2)
+            completed = total_ord - cancelled
+            # Format date label as '21 Jun' — cross-platform safe (no %-d)
+            date_label = str(r["kpi_date"])
+            try:
+                from datetime import date as _date
+                parsed = _date.fromisoformat(date_label)
+                date_label = f"{parsed.day} {parsed.strftime('%b')}"
+            except Exception:
+                pass
+            result.append({
+                "name": date_label,
+                "revenue": rev,
+                "profit": profit,
+                "completed": completed,
+                "cancelled": cancelled
+            })
+        return result
 
     @staticmethod
     def get_scope_details(db: Session, scope_type: str, scope_id: int | None):

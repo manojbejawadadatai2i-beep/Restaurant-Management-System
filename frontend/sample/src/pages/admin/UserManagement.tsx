@@ -142,11 +142,27 @@ export const UserManagement: React.FC = () => {
         setIsFormOpen(false);
         setMessage('User created successfully. Credentials downloaded.');
       } else {
+        let finalDistrictId = assignedDistrictId;
+        let finalRegionId = assignedRegionId;
+
+        if (role === 'Store Manager' && assignedStoreId && meta) {
+          const matchedStore = meta.stores.find(s => s.id === parseInt(assignedStoreId, 10));
+          if (matchedStore) {
+            finalDistrictId = matchedStore.district_id.toString();
+            finalRegionId = matchedStore.region_id.toString();
+          }
+        } else if (role === 'District Manager' && assignedDistrictId && meta) {
+          const matchedDist = meta.districts.find(d => d.id === parseInt(assignedDistrictId, 10));
+          if (matchedDist) {
+            finalRegionId = matchedDist.region_id.toString();
+          }
+        }
+
         await axios.put(`/api/users/${editingUser!.id}`, {
           role,
           assigned_store_id: assignedStoreId || null,
-          assigned_district_id: assignedDistrictId || null,
-          assigned_region_id: assignedRegionId || null,
+          assigned_district_id: finalDistrictId || null,
+          assigned_region_id: finalRegionId || null,
         });
         setMessage('User updated successfully!');
         await refreshUsers();
