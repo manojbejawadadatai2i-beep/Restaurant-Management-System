@@ -13,7 +13,10 @@ import {
   MapPin,
   Store,
   XCircle,
-  Sparkles
+  Sparkles,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { 
   AreaChart,
@@ -90,6 +93,12 @@ export const Dashboard: React.FC = () => {
   const [filterRegion, setFilterRegion] = useState('');
   const [filterDistrict, setFilterDistrict] = useState('');
   const [filterStore, setFilterStore] = useState('');
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const paramDate = searchParams.get('date');
+    if (paramDate) return paramDate;
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  });
 
   const storeIdParam = searchParams.get('storeId');
   const districtIdParam = searchParams.get('districtId');
@@ -139,9 +148,16 @@ export const Dashboard: React.FC = () => {
     }
   }, [storeIdParam, districtIdParam, regionIdParam, stores, districts]);
 
+  useEffect(() => {
+    const dateParam = searchParams.get('date');
+    if (dateParam && dateParam !== selectedDate) {
+      setSelectedDate(dateParam);
+    }
+  }, [searchParams]);
+
   // Primary TanStack Query: Fetch dashboard analytics
   const { data, isLoading, isError } = useQuery<DashboardResponse>({
-    queryKey: ['dashboardData', currentUser?.id, filterRegion, filterDistrict, filterStore],
+    queryKey: ['dashboardData', currentUser?.id, filterRegion, filterDistrict, filterStore, selectedDate],
     queryFn: async () => {
       if (!currentUser) throw new Error('No user authenticated');
       const response = await api.get('/api/dashboard', {
@@ -149,7 +165,8 @@ export const Dashboard: React.FC = () => {
           userId: currentUser.id,
           filterRegionId: filterRegion || undefined,
           filterDistrictId: filterDistrict || undefined,
-          filterStoreId: filterStore || undefined
+          filterStoreId: filterStore || undefined,
+          kpiDate: selectedDate || undefined
         }
       });
       return response.data;
@@ -235,6 +252,7 @@ export const Dashboard: React.FC = () => {
     setFilterStore('');
     const params: Record<string, string> = {};
     if (val) params.regionId = val;
+    if (selectedDate) params.date = selectedDate;
     setSearchParams(params);
   };
 
@@ -244,6 +262,7 @@ export const Dashboard: React.FC = () => {
     const params: Record<string, string> = {};
     if (filterRegion) params.regionId = filterRegion;
     if (val) params.districtId = val;
+    if (selectedDate) params.date = selectedDate;
     setSearchParams(params);
   };
 
@@ -253,7 +272,21 @@ export const Dashboard: React.FC = () => {
     if (filterRegion) params.regionId = filterRegion;
     if (filterDistrict) params.districtId = filterDistrict;
     if (val) params.storeId = val;
+    if (selectedDate) params.date = selectedDate;
     setSearchParams(params);
+  };
+
+  const updateSelectedDate = (nextDate: string) => {
+    setSelectedDate(nextDate);
+    const params = new URLSearchParams(searchParams);
+    params.set('date', nextDate);
+    setSearchParams(params);
+  };
+
+  const shiftSelectedDate = (days: number) => {
+    const current = new Date(selectedDate);
+    current.setDate(current.getDate() + days);
+    updateSelectedDate(current.toISOString().split('T')[00]);
   };
 
   // Filter lists based on hierarchy selection
@@ -307,24 +340,53 @@ export const Dashboard: React.FC = () => {
             </span>
           </h1>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-            Restaurant operations, sales volume, and order analytics.
+            Selected sales snapshot — {new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
         </div>
         
-        {/* Back to Overview Button */}
-        {(filterRegion || filterDistrict || filterStore) && (
-          <button
-            onClick={() => {
-              setFilterRegion('');
-              setFilterDistrict('');
-              setFilterStore('');
-              setSearchParams({});
-            }}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-350 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all active:scale-95"
-          >
-            ← Back to Overview
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 px-2 py-2 shadow-sm">
+            <button
+              type="button"
+              onClick={() => shiftSelectedDate(-1)}
+              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+              aria-label="Previous day"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <label className="flex items-center gap-2 px-2 py-1 text-xs font-semibold text-slate-600 dark:text-slate-300">
+              <CalendarDays size={14} className="text-blue-500" />
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => updateSelectedDate(e.target.value)}
+                className="rounded-lg border border-slate-200 dark:border-slate-800 bg-transparent px-2 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => shiftSelectedDate(1)}
+              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+              aria-label="Next day"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
+          {(filterRegion || filterDistrict || filterStore) && (
+            <button
+              onClick={() => {
+                setFilterRegion('');
+                setFilterDistrict('');
+                setFilterStore('');
+                setSearchParams({ date: selectedDate });
+              }}
+              className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-350 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all active:scale-95"
+            >
+              ← Back to Overview
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 2. Regional / Store Selectors (Corporate / Administrator view only) */}
@@ -398,7 +460,7 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
           <div>
-            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total Orders</span>
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Today's Orders</span>
             <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatNumber(data.metrics.totalOrders)}</h3>
           </div>
         </Card>
@@ -415,7 +477,7 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
           <div>
-            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total Revenue</span>
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Today's Revenue</span>
             <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatCurrency(data.metrics.totalRevenue)}</h3>
           </div>
         </Card>
@@ -431,7 +493,7 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
           <div>
-            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total Expenses</span>
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Today's Expenses</span>
             <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatCurrency(data.metrics.totalCost)}</h3>
           </div>
         </Card>
@@ -447,7 +509,7 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
           <div>
-            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Net Profit</span>
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Today's Net Profit</span>
             <h3 className="text-3xl font-extrabold text-slate-800 dark:text-white tracking-tight mt-2">{formatCurrency(data.metrics.totalProfit)}</h3>
           </div>
         </Card>

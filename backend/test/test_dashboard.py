@@ -108,6 +108,32 @@ class TestDashboardAPI(unittest.TestCase):
         data = response.json()
         self.assertGreater(data["metrics"]["totalRevenue"], 0)
 
+    def test_get_dashboard_uses_selected_date(self):
+        response = self.client.get("/api/dashboard?userId=1&kpiDate=2026-07-11")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertGreater(data["metrics"]["totalRevenue"], 0)
+
+        response_previous = self.client.get("/api/dashboard?userId=1&kpiDate=2026-07-10")
+        self.assertEqual(response_previous.status_code, 200)
+        previous_data = response_previous.json()
+
+        self.assertNotEqual(data["metrics"]["totalRevenue"], previous_data["metrics"]["totalRevenue"])
+
+    def test_dashboard_uses_raw_kpi_values(self):
+        from sqlalchemy import text
+
+        row = self.db.execute(text("SELECT total_revenue, total_orders FROM daily_store_kpis WHERE store_id = 1 AND kpi_date = '2026-07-11'"))
+        db_row = row.mappings().first()
+        self.assertIsNotNone(db_row)
+
+        response = self.client.get("/api/dashboard?userId=1&filterStoreId=1&kpiDate=2026-07-11")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+
+        self.assertEqual(float(data["metrics"]["totalRevenue"]), float(db_row["total_revenue"]))
+        self.assertEqual(int(data["metrics"]["totalOrders"]), int(db_row["total_orders"]))
+
     def test_get_dashboard_missing_user(self):
         response = self.client.get("/api/dashboard?userId=99999")
         self.assertEqual(response.status_code, 404)

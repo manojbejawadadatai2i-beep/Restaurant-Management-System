@@ -15,6 +15,15 @@ class DashboardRepository:
         return "2026-07-10"
 
     @staticmethod
+    def resolve_kpi_date(db: Session, requested_date: str | None) -> str:
+        if requested_date:
+            for table_name in ["daily_store_kpis", "district_kpis", "region_kpis", "corporate_kpis"]:
+                result = db.execute(text(f"SELECT 1 FROM {table_name} WHERE kpi_date = :kpi_date LIMIT 1"), {"kpi_date": requested_date}).scalar()
+                if result:
+                    return requested_date
+        return DashboardRepository.get_latest_kpi_date(db)
+
+    @staticmethod
     def get_metrics_and_trends(db: Session, scope_type: str, scope_id: int | None, latest_date: str):
         total_revenue = 0.0
         total_orders = 0

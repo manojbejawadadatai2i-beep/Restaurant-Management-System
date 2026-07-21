@@ -36,8 +36,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (prev) {
           const updated = response.data.find((u: User) => u.id === prev.id);
           if (updated) {
-            localStorage.setItem('currentUser', JSON.stringify(updated));
-            return updated;
+            const merged = {
+              ...updated,
+              requires_password_change: prev.requires_password_change ?? updated.requires_password_change,
+              is_new_user: prev.is_new_user ?? updated.is_new_user,
+            };
+            localStorage.setItem('currentUser', JSON.stringify(merged));
+            return merged;
           }
         }
         return prev;
@@ -67,7 +72,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       district_name: user.district_name,
       assigned_region_id: user.assigned_region_id,
       region_name: user.region_name,
-      token: access_token
+      token: access_token,
+      requires_password_change: user.requires_password_change,
+      is_new_user: user.is_new_user,
     };
     setCurrentUser(authenticatedUser);
     localStorage.setItem('currentUser', JSON.stringify(authenticatedUser));
@@ -87,7 +94,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       district_name: user.district_name,
       assigned_region_id: user.assigned_region_id,
       region_name: user.region_name,
-      token: access_token
+      token: access_token,
+      requires_password_change: user.requires_password_change,
+      is_new_user: user.is_new_user,
     };
     setCurrentUser(authenticatedUser);
     localStorage.setItem('currentUser', JSON.stringify(authenticatedUser));

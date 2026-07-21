@@ -55,6 +55,7 @@ class UserService:
                 "username": u.username,
                 "email": u.email,
                 "role": role_name,
+                "login_method": u.login_method,
                 "assigned_store_id": u.assigned_store_id,
                 "store_name": u.store_name,
                 "assigned_district_id": u.assigned_district_id,
@@ -77,6 +78,7 @@ class UserService:
         
         username = data.get("username")
         email = data.get("email")
+        email = email.strip().lower() if email else None
         
         if email:
             existing = UserRepository.get_user_by_email(db, email)
@@ -121,7 +123,9 @@ class UserService:
             store_obj = db.query(Store).filter(Store.id == store_id).first()
             if store_obj:
                 district_id = store_obj.district_id
-                region_id = store_obj.region_id
+                from models import District
+                dist_obj = db.query(District).filter(District.id == district_id).first()
+                region_id = dist_obj.region_id if dist_obj else None
         elif district_id and not region_id:
             from models import District
             dist_obj = db.query(District).filter(District.id == district_id).first()
@@ -143,6 +147,8 @@ class UserService:
             full_name=username,
             email=email or f"{username.lower().replace(' ', '_')}@restaurant.com",
             password_hash=hashed_password,
+            # Use explicit values: 'password_only', 'google_only', 'both'
+            login_method=data.get("login_method") or "both",
             role_id=role_id,
             corporate_id=1,
             region_id=region_id,
@@ -174,14 +180,18 @@ class UserService:
             store_obj = db.query(Store).filter(Store.id == store_id).first()
             if store_obj:
                 district_id = store_obj.district_id
-                region_id = store_obj.region_id
+                from models import District
+                dist_obj = db.query(District).filter(District.id == district_id).first()
+                region_id = dist_obj.region_id if dist_obj else None
         elif district_id and not region_id:
             from models import District
             dist_obj = db.query(District).filter(District.id == district_id).first()
             if dist_obj:
                 region_id = dist_obj.region_id
 
-        updated = UserRepository.update_user(db, user_id, role_id, store_id, district_id, region_id)
+        login_method = data.get("login_method")
+
+        updated = UserRepository.update_user(db, user_id, role_id, store_id, district_id, region_id, login_method=login_method)
         if not updated:
             raise ValueError("User not found")
         return updated

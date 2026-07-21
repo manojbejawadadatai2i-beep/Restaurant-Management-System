@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "dev": "concurrently \"npm:server\" \"npm:client\"",
     "client": "vite",
-    "server": "nodemon server/index.js",
+    "server": "node --watch server/index.js",
     "db:seed": "node server/seed.js",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
@@ -15,6 +15,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.101.2",
     "axios": "^1.18.1",
+    "bcryptjs": "^3.0.3",
     "concurrently": "^10.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",

@@ -108,13 +108,13 @@ def seed_db():
         hashed_password = bcrypt.hashpw(raw_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
         users_sql = """
-        INSERT INTO users (id, employee_id, full_name, email, password_hash, google_id, role_id, corporate_id, region_id, district_id, store_id, is_active) VALUES
-        (1, 'EMP-001', 'Mohan Krishna', 'corporate@restaurant.com', :password_hash, NULL, 1, 1, NULL, NULL, NULL, TRUE),
-        (2, 'EMP-002', 'Ramesh Babu', 'region@restaurant.com', :password_hash, NULL, 2, 1, 1, NULL, NULL, TRUE),
-        (3, 'EMP-003', 'Venkatesh Prasad', 'district@restaurant.com', :password_hash, NULL, 3, 1, 2, 3, NULL, TRUE),
-        (4, 'EMP-004', 'Vijay Kumar', 'store1@restaurant.com', :password_hash, NULL, 4, 1, 1, 1, 1, TRUE),
-        (5, 'EMP-005', 'Suresh Naidu', 'store2@restaurant.com', :password_hash, NULL, 4, 1, 2, 3, 2, TRUE),
-        (8, 'EMP-008', 'User Manager Admin', 'mohankrishna.datai2i@gmail.com', :password_hash, 'mohankrishna.datai2i@gmail.com', 5, 1, NULL, NULL, NULL, TRUE)
+        INSERT INTO users (id, employee_id, full_name, email, password_hash, login_method, role_id, corporate_id, region_id, district_id, store_id, is_active) VALUES
+        (1, 'EMP-001', 'Mohan Krishna', 'corporate@restaurant.com', :password_hash, 'both', 1, 1, NULL, NULL, NULL, TRUE),
+        (2, 'EMP-002', 'Ramesh Babu', 'region@restaurant.com', :password_hash, 'both', 2, 1, 1, NULL, NULL, TRUE),
+        (3, 'EMP-003', 'Venkatesh Prasad', 'district@restaurant.com', :password_hash, 'both', 3, 1, 2, 3, NULL, TRUE),
+        (4, 'EMP-004', 'Vijay Kumar', 'store1@restaurant.com', :password_hash, 'both', 4, 1, 1, 1, 1, TRUE),
+        (5, 'EMP-005', 'Suresh Naidu', 'store2@restaurant.com', :password_hash, 'both', 4, 1, 2, 3, 2, TRUE),
+        (8, 'EMP-008', 'User Manager Admin', 'mohankrishna.datai2i@gmail.com', :password_hash, 'both', 5, 1, NULL, NULL, NULL, TRUE)
         ON CONFLICT (id) DO NOTHING;
         """
         conn.execute(text(users_sql), {"password_hash": hashed_password})

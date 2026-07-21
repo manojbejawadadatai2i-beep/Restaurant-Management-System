@@ -13,12 +13,13 @@ def get_dashboard(
     filterDistrictId: Optional[int] = Query(None, description="District filter ID"),
     filterStoreId: Optional[int] = Query(None, description="Store filter ID"),
     hourFilter: Optional[str] = Query(None, description="Hour aggregation slot filter"),
+    kpiDate: Optional[str] = Query(None, description="KPI date to retrieve metrics for"),
     db: Session = Depends(get_db)
 ):
     """Retrieve full dashboard KPI, staff, peak hour, and order metrics scoped to user permissions."""
     try:
         return DashboardService.get_dashboard_data(
-            db, userId, filterRegionId, filterDistrictId, filterStoreId, hourFilter
+            db, userId, filterRegionId, filterDistrictId, filterStoreId, hourFilter, kpiDate
         )
     except HTTPException as exc:
         raise exc

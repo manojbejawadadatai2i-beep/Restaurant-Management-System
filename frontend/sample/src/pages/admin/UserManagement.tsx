@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import type { User } from '../../types';
 import axios from '../../utils/axios';
-import { UserCog, Store, Map, Landmark, Trash2, Search, Plus } from 'lucide-react';
+import { UserCog, Building2, MapPin, Landmark, Trash2, Search, Plus } from 'lucide-react';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/Table';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle } from '../../components/ui/Card';
@@ -26,8 +26,6 @@ export const UserManagement: React.FC = () => {
   const [isAdding, setIsAdding] = useState(false);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
-  const [storeOption, setStoreOption] = useState<'existing' | 'new'>('existing');
-  const [newStoreName, setNewStoreName] = useState('');
   const [role, setRole] = useState('');
   const [assignedStoreId, setAssignedStoreId] = useState<string>('');
   const [assignedDistrictId, setAssignedDistrictId] = useState<string>('');
@@ -37,8 +35,6 @@ export const UserManagement: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [message, setMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-
-  const [createdUserEmail, setCreatedUserEmail] = useState<string | null>(null);
 
   const filteredUsers = users.filter(u => {
     const q = searchQuery.toLowerCase();
@@ -72,7 +68,6 @@ export const UserManagement: React.FC = () => {
     setAssignedDistrictId(user.assigned_district_id?.toString() || '');
     setAssignedRegionId(user.assigned_region_id?.toString() || '');
     setMessage('');
-    setCreatedUserEmail(null);
     setIsFormOpen(true);
   };
 
@@ -85,11 +80,21 @@ export const UserManagement: React.FC = () => {
     setAssignedRegionId('');
     setAssignedDistrictId('');
     setAssignedStoreId('');
-    setStoreOption('existing');
-    setNewStoreName('');
     setMessage('');
-    setCreatedUserEmail(null);
     setIsFormOpen(true);
+  };
+
+  // Helper: download a single-row credentials CSV instantly
+  const downloadCredentials = (data: { username: string; email: string; password: string; role: string }) => {
+    const header = 'Username,Email,Password,Role';
+    const row = `"${data.username}","${data.email}","${data.password}","${data.role}"`;
+    const blob = new Blob([header + '\n' + row], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `credentials_${data.username.replace(/\s+/g, '_')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -98,13 +103,12 @@ export const UserManagement: React.FC = () => {
 
     setIsSaving(true);
     setMessage('');
-    setCreatedUserEmail(null);
     try {
       if (isAdding) {
         let finalDistrictId = assignedDistrictId;
         let finalRegionId = assignedRegionId;
 
-        if (role === 'Store Manager' && storeOption === 'existing' && assignedStoreId && meta) {
+        if (role === 'Store Manager' && assignedStoreId && meta) {
           const matchedStore = meta.stores.find(s => s.id === parseInt(assignedStoreId, 10));
           if (matchedStore) {
             finalDistrictId = matchedStore.district_id.toString();
@@ -121,24 +125,28 @@ export const UserManagement: React.FC = () => {
           username,
           email: email || null,
           role,
-          assigned_store_id: storeOption === 'existing' && assignedStoreId ? assignedStoreId : null,
+          assigned_store_id: assignedStoreId || null,
           assigned_district_id: finalDistrictId || null,
           assigned_region_id: finalRegionId || null,
-          addNewStore: storeOption === 'new',
-          newStoreName: storeOption === 'new' ? newStoreName : null,
-          newStoreId: storeOption === 'new' ? Math.floor(100 + Math.random() * 900).toString() : null
         });
 
-        const targetEmail = res.data.recipientEmail || email || `${username.toLowerCase().replace(/\s+/g, '_')}@restaurant.com`;
-        setCreatedUserEmail(targetEmail);
-        setMessage('User added successfully! Automated email dispatched.');
+        // Auto-download credentials as CSV
+        downloadCredentials({
+          username: res.data.username,
+          email: res.data.email,
+          password: res.data.password,
+          role: res.data.role,
+        });
+
         await refreshUsers();
+        setIsFormOpen(false);
+        setMessage('User created successfully. Credentials downloaded.');
       } else {
         await axios.put(`/api/users/${editingUser!.id}`, {
           role,
           assigned_store_id: assignedStoreId || null,
           assigned_district_id: assignedDistrictId || null,
-          assigned_region_id: assignedRegionId || null
+          assigned_region_id: assignedRegionId || null,
         });
         setMessage('User updated successfully!');
         await refreshUsers();
@@ -149,12 +157,13 @@ export const UserManagement: React.FC = () => {
         }, 1200);
       }
     } catch (err: any) {
-      const errorMsg = err.response?.data?.error || 'Error processing request.';
+      const errorMsg = err.response?.data?.detail || err.response?.data?.error || 'Error processing request.';
       setMessage(errorMsg);
     } finally {
       setIsSaving(false);
     }
   };
+
 
   const handleDelete = async (userId: number) => {
     setIsDeleting(true);
@@ -248,6 +257,7 @@ export const UserManagement: React.FC = () => {
                 <TableHead>Username</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Assigned Scope</TableHead>
+                <TableHead>Login Method</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -269,12 +279,12 @@ export const UserManagement: React.FC = () => {
                     <div className="flex flex-col gap-1">
                       {u.store_name && (
                         <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-                          <Store size={13} className="text-slate-400" /> {u.store_name}
+                          <Building2 size={13} className="text-slate-400" /> {u.store_name}
                         </span>
                       )}
                       {u.district_name && (
                         <span className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-                          <Map size={13} className="text-slate-400" /> {u.district_name}
+                          <MapPin size={13} className="text-slate-400" /> {u.district_name}
                         </span>
                       )}
                       {u.region_name && (
@@ -286,6 +296,15 @@ export const UserManagement: React.FC = () => {
                         <span className="text-slate-400 text-xs font-medium">System-Wide Access</span>
                       )}
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
+                      u.login_method === 'google_only'
+                        ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-900/40'
+                        : 'bg-slate-50 dark:bg-slate-900/60 text-slate-600 dark:text-slate-400 border-slate-100 dark:border-slate-800'
+                    }`}>
+                      {u.login_method === 'google_only' ? 'Google Login' : (u.login_method === 'password_only' ? 'Password Only' : 'Both')}
+                    </span>
                   </TableCell>
                   <TableCell className="text-right">
                     {deletingUserId === u.id ? (
@@ -346,7 +365,7 @@ export const UserManagement: React.FC = () => {
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
         title={isAdding ? 'Add New User' : 'Manage User Access'}
-        description={isAdding ? 'Create credentials and assign a role scope' : `Adjust region/district/store scope for ${editingUser?.username}`}
+        description={isAdding ? 'Create credentials and assign a role scope. A credentials sheet will be downloaded automatically.' : `Adjust region/district/store scope for ${editingUser?.username}`}
         size="md"
       >
         <form onSubmit={handleSave} className="space-y-4">
@@ -368,19 +387,19 @@ export const UserManagement: React.FC = () => {
                 placeholder="name@restaurant.com"
                 required
               />
-              
-              {/* Abstracted Automated Email Notification Banner */}
-              <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-3.5 rounded-xl flex items-center justify-between">
+
+              {/* Auto-credentials info banner */}
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 p-3.5 rounded-xl flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold text-slate-900 dark:text-white">
-                    Credentials & Access Verification
+                  <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                    Auto-Generated Password
                   </p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                    A secure password and verification link will be automatically emailed to the user upon creation.
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 leading-relaxed">
+                    A secure password is generated automatically. A credentials sheet (.csv) will download immediately after user creation.
                   </p>
                 </div>
-                <span className="text-[9px] font-extrabold uppercase px-2.5 py-1 bg-blue-500 text-white rounded-lg tracking-wider flex-shrink-0">
-                  Automated Email
+                <span className="text-[9px] font-extrabold uppercase px-2.5 py-1 bg-amber-500 text-white rounded-lg tracking-wider flex-shrink-0">
+                  Auto CSV
                 </span>
               </div>
             </>
@@ -397,76 +416,24 @@ export const UserManagement: React.FC = () => {
             ]}
           />
 
-          {/* Scope Assignment - Backend Auto-Derives Region & District */}
+          {/* Scope Assignment */}
           {role === 'Store Manager' && meta && (
             <div className="space-y-3">
-              <div className="flex gap-4 border-b border-slate-100 dark:border-slate-800 pb-2">
-                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-350 font-semibold cursor-pointer">
-                  <input
-                    type="radio"
-                    name="storeOption"
-                    checked={storeOption === 'existing'}
-                    onChange={() => setStoreOption('existing')}
-                    className="accent-orange-500"
-                  />
-                  Existing Store
-                </label>
-                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-350 font-semibold cursor-pointer">
-                  <input
-                    type="radio"
-                    name="storeOption"
-                    checked={storeOption === 'new'}
-                    onChange={() => setStoreOption('new')}
-                    className="accent-orange-500"
-                  />
-                  Create New Store
-                </label>
-              </div>
-
-              {storeOption === 'existing' ? (
-                <>
-                  <Select
-                    label="Assign Store"
-                    value={assignedStoreId}
-                    onChange={(e: any) => setAssignedStoreId(e.target.value)}
-                    placeholder="Select Store..."
-                    required
-                    options={meta.stores.map(s => ({ value: s.id, label: s.name }))}
-                  />
-
-                  {assignedStoreId && storeDistrictObj && storeRegionObj && (
-                    <div className="bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                      <p className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Backend Auto-Resolved Scope</p>
-                      <div className="flex gap-3 font-semibold">
-                        <span>District: <strong className="text-slate-800 dark:text-slate-200">{storeDistrictObj.name}</strong></span>
-                        <span>Region: <strong className="text-slate-800 dark:text-slate-200">{storeRegionObj.name}</strong></span>
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="space-y-3 bg-slate-50 dark:bg-slate-950/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
-                  <Input
-                    label="New Store Name"
-                    type="text"
-                    value={newStoreName}
-                    onChange={(e: any) => setNewStoreName(e.target.value)}
-                    placeholder="e.g. Store 19"
-                    required
-                  />
-                  <Select
-                    label="Assign District"
-                    value={assignedDistrictId}
-                    onChange={(e: any) => setAssignedDistrictId(e.target.value)}
-                    placeholder="Select District..."
-                    required
-                    options={meta.districts.map(d => ({ value: d.id, label: d.name }))}
-                  />
-                  {assignedDistrictId && distRegionObj && (
-                    <p className="text-[11px] text-slate-500 font-medium">
-                      Region <strong className="text-slate-800 dark:text-slate-200">{distRegionObj.name}</strong> auto-assigned by backend.
-                    </p>
-                  )}
+              <Select
+                label="Assign Store"
+                value={assignedStoreId}
+                onChange={(e: any) => setAssignedStoreId(e.target.value)}
+                placeholder="Select Store..."
+                required
+                options={meta.stores.map(s => ({ value: s.id, label: s.name }))}
+              />
+              {assignedStoreId && storeDistrictObj && storeRegionObj && (
+                <div className="bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                  <p className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Auto-Resolved Scope</p>
+                  <div className="flex gap-3 font-semibold">
+                    <span>District: <strong className="text-slate-800 dark:text-slate-200">{storeDistrictObj.name}</strong></span>
+                    <span>Region: <strong className="text-slate-800 dark:text-slate-200">{storeRegionObj.name}</strong></span>
+                  </div>
                 </div>
               )}
             </div>
@@ -484,7 +451,7 @@ export const UserManagement: React.FC = () => {
               />
               {assignedDistrictId && distRegionObj && (
                 <div className="bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400">
-                  <p className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Backend Auto-Resolved Scope</p>
+                  <p className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Auto-Resolved Scope</p>
                   <p className="font-semibold mt-0.5">Region: <strong className="text-slate-800 dark:text-slate-200">{distRegionObj.name}</strong></p>
                 </div>
               )}
@@ -502,17 +469,7 @@ export const UserManagement: React.FC = () => {
             />
           )}
 
-          {/* Automated Email Confirmation Banner */}
-          {createdUserEmail && (
-            <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-4 rounded-xl space-y-1">
-              <p className="text-xs font-extrabold text-emerald-800 dark:text-emerald-300">User Created Successfully!</p>
-              <p className="text-xs text-emerald-700 dark:text-emerald-400 leading-relaxed">
-                An automated email with login credentials and account verification instructions has been sent to <strong>{createdUserEmail}</strong>.
-              </p>
-            </div>
-          )}
-
-          {message && !createdUserEmail && (
+          {message && (
             <Alert variant={message.includes('successfully') ? 'success' : 'error'}>
               {message}
             </Alert>
@@ -524,14 +481,14 @@ export const UserManagement: React.FC = () => {
               isLoading={isSaving}
               className="flex-1"
             >
-              {isAdding ? 'Create User' : 'Save Changes'}
+              {isAdding ? 'Create User & Download Credentials' : 'Save Changes'}
             </Button>
             <Button
               type="button"
               onClick={() => setIsFormOpen(false)}
               variant="outline"
             >
-              {createdUserEmail ? 'Close' : 'Cancel'}
+              Cancel
             </Button>
           </div>
         </form>
@@ -540,3 +497,4 @@ export const UserManagement: React.FC = () => {
     </div>
   );
 };
+

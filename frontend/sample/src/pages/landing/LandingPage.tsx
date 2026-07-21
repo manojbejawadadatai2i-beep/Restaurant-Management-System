@@ -7,15 +7,9 @@ import {
   Sparkles, 
   TrendingUp, 
   ArrowRight, 
-  Search, 
   X, 
-  ShieldCheck, 
-  Users, 
   LayoutDashboard, 
   ChevronRight,
-  Store,
-  MapPin,
-  Building,
   Mail,
   Lock,
   Loader2,
@@ -23,29 +17,14 @@ import {
 } from 'lucide-react';
 
 export const LandingPage: React.FC = () => {
-  const { users, login, loginGoogle } = useAuth();
+  const { login, loginGoogle } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'admin' | 'manager'>('admin');
-  const [searchQuery, setSearchQuery] = useState('');
 
   // Form States
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-
-  // Filter users into Admins and Managers for the Autofill quick selector
-  const admins = users.filter(u => u.role === 'Corporate Administrator' || u.role === 'Administrator');
-  const managers = users.filter(u => u.role === 'Regional Manager' || u.role === 'District Manager' || u.role === 'Store Manager');
-
-  // Filter managers based on query
-  const filteredManagers = managers.filter(u => 
-    u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (u.store_name && u.store_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (u.district_name && u.district_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (u.region_name && u.region_name.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
 
   // Load Google Client library dynamically
   useEffect(() => {
@@ -95,18 +74,11 @@ export const LandingPage: React.FC = () => {
       await login(emailInput, passwordInput);
       setDrawerOpen(false);
     } catch (err: any) {
-      setErrorMsg(err.response?.data?.detail || 'Authentication failed. Please check your credentials.');
+      const serverMsg = err.response?.data?.detail || err.response?.data?.error || 'Authentication failed. Please check your credentials.';
+      setErrorMsg(serverMsg);
     } finally {
       setLoginLoading(false);
     }
-  };
-
-  // Autofill details helper
-  const handleAutofill = (email: string) => {
-    setEmailInput(email);
-    // Autofill plaintext fallback which matches $2b$12$PLACEHOLDER_HASH in seeded database users
-    setPasswordInput('$2b$12$PLACEHOLDER_HASH');
-    setErrorMsg('');
   };
 
   return (
@@ -321,138 +293,8 @@ export const LandingPage: React.FC = () => {
             </p>
           </div>
 
-          {/* Quick Profile Autofill section */}
-          <div className="mt-4 border-t border-slate-100 dark:border-slate-800 pt-4 flex-1 flex flex-col min-h-0 gap-3">
-            <div>
-              <h4 className="text-[11px] font-bold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                <Users size={12} className="text-orange-500" /> Quick Autofill Profiles
-              </h4>
-              <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-0.5">Click a role to load its seeded demo credentials</p>
-            </div>
-
-            {/* Toggle Tabs (Admin / Manager) */}
-            <div className="flex bg-slate-100 dark:bg-slate-950 p-1 rounded-xl flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('admin');
-                  setSearchQuery('');
-                }}
-                className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-colors flex items-center justify-center gap-1 ${
-                  activeTab === 'admin' 
-                    ? 'bg-white dark:bg-slate-800 text-orange-500 dark:text-white shadow-sm' 
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('manager');
-                  setSearchQuery('');
-                }}
-                className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-colors flex items-center justify-center gap-1 ${
-                  activeTab === 'manager' 
-                    ? 'bg-white dark:bg-slate-800 text-orange-500 dark:text-white shadow-sm' 
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                Manager
-              </button>
-            </div>
-
-            {/* Search bar for Managers */}
-            {activeTab === 'manager' && (
-              <div className="relative flex-shrink-0">
-                <input
-                  type="text"
-                  placeholder="Search managers..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-955 border border-slate-200 dark:border-slate-805 text-slate-800 dark:text-slate-200 rounded-xl pl-9 pr-4 py-2 text-[10px] focus:outline-none focus:ring-1 focus:ring-orange-500/50 focus:border-orange-505 transition-all placeholder-slate-400 dark:placeholder-slate-500"
-                />
-                <Search size={12} className="absolute left-3.5 top-2.5 text-slate-400 dark:text-slate-500" />
-              </div>
-            )}
-
-            {/* List of Accounts */}
-            <div className="overflow-y-auto flex-1 max-h-[170px] pr-1 space-y-2">
-              {activeTab === 'admin' ? (
-                admins.length === 0 ? (
-                  <div className="text-center py-4 text-[10px] text-slate-400 dark:text-slate-500">Loading administrators...</div>
-                ) : (
-                  admins.map(u => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => handleAutofill(u.email || '')}
-                      className="w-full text-left p-3 rounded-xl border border-slate-100 hover:border-orange-500 dark:border-slate-800 dark:hover:border-orange-500 bg-slate-50/50 dark:bg-slate-950/20 hover:bg-orange-50/20 dark:hover:bg-orange-950/10 transition-all flex items-start gap-2.5 group"
-                    >
-                      <div className="p-2 rounded-xl bg-orange-100 dark:bg-orange-950/50 text-orange-500 group-hover:bg-orange-500 group-hover:text-white transition-colors flex-shrink-0">
-                        <ShieldCheck size={14} />
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-[11px] font-bold text-slate-900 dark:text-white group-hover:text-orange-500 dark:group-hover:text-orange-400 transition-colors">
-                          {u.username}
-                        </h4>
-                        <p className="text-[9px] text-slate-400 dark:text-slate-500 font-medium truncate">{u.email}</p>
-                      </div>
-                    </button>
-                  ))
-                )
-              ) : (
-                // Manager Tab
-                filteredManagers.length === 0 ? (
-                  <div className="text-center py-4 text-[10px] text-slate-400 dark:text-slate-500">
-                    {searchQuery ? 'No matching managers found.' : 'Loading manager accounts...'}
-                  </div>
-                ) : (
-                  filteredManagers.map(u => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => handleAutofill(u.email || '')}
-                      className="w-full text-left p-2.5 rounded-xl border border-slate-100 hover:border-orange-500 dark:border-slate-800 dark:hover:border-orange-500 bg-slate-50/50 dark:bg-slate-950/20 hover:bg-orange-50/20 dark:hover:bg-orange-950/10 transition-all flex items-start gap-2.5 group"
-                    >
-                      <div className="p-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-colors flex-shrink-0">
-                        <Users size={12} />
-                      </div>
-                      <div className="flex-1 min-w-0 text-left">
-                        <h4 className="text-[11px] font-bold text-slate-900 dark:text-white group-hover:text-orange-500 dark:group-hover:text-orange-400 transition-colors truncate">
-                          {u.username}
-                        </h4>
-                        <p className="text-[9px] text-slate-400 dark:text-slate-500 font-medium truncate leading-tight">{u.email}</p>
-                        
-                        {/* Manager Scoped Details */}
-                        {u.store_name && (
-                          <p className="text-[8px] text-slate-400 dark:text-slate-500 mt-0.5 leading-none flex items-center gap-0.5 font-medium truncate">
-                            <Store size={8} className="text-emerald-500" /> {u.store_name}
-                          </p>
-                        )}
-                        {u.district_name && (
-                          <p className="text-[8px] text-slate-400 dark:text-slate-500 mt-0.5 leading-none flex items-center gap-0.5 font-medium truncate">
-                            <MapPin size={8} className="text-indigo-500" /> {u.district_name}
-                          </p>
-                        )}
-                        {u.region_name && (
-                          <p className="text-[8px] text-slate-400 dark:text-slate-500 mt-0.5 leading-none flex items-center gap-0.5 font-medium truncate">
-                            <Building size={8} className="text-blue-500" /> {u.region_name}
-                          </p>
-                        )}
-                      </div>
-                    </button>
-                  ))
-                )
-              )}
-            </div>
-          </div>
         </div>
 
-        {/* Drawer footer details */}
-        <div className="p-6 bg-slate-50/50 dark:bg-slate-950/20 border-t border-slate-100 dark:border-slate-800 text-[9px] text-slate-400 dark:text-slate-500 text-center">
-          Note: Click any quick-autofill profile to load its database email and mock plaintext password hash.
-        </div>
       </div>
 
     </div>

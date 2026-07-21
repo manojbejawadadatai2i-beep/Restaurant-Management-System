@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS users (
     full_name VARCHAR(100) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash TEXT,
-    google_id VARCHAR(255) UNIQUE,
+    login_method VARCHAR(50) NOT NULL DEFAULT 'both',
     role_id INTEGER NOT NULL,
     corporate_id INTEGER NOT NULL,
     region_id INTEGER,

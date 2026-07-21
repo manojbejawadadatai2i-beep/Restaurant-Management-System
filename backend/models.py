@@ -68,7 +68,8 @@ class User(Base):
     full_name = Column(String(255), nullable=False)
     email = Column(String(255), nullable=False)
     password_hash = Column(String(255), nullable=False)
-    google_id = Column(String(255), nullable=True)
+    # Explicit login_method values: 'password_only', 'google_only', 'both'
+    login_method = Column(String(50), nullable=False, default='both')
     role_id = Column(Integer, nullable=True)
     corporate_id = Column(Integer, ForeignKey('corporates.id'), nullable=True)
     region_id = Column(Integer, ForeignKey('regions.id'), nullable=True)

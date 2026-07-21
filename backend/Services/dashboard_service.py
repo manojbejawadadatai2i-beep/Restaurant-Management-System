@@ -1,11 +1,12 @@
 import math
+from datetime import datetime
 from sqlalchemy.orm import Session
 from Repositories.dashboard_repository import DashboardRepository
 from Repositories.user_repository import UserRepository
 
 class DashboardService:
     @staticmethod
-    def get_dashboard_data(db: Session, user_id: int, filter_region_id: int | None, filter_district_id: int | None, filter_store_id: int | None, hour_filter: str | None):
+    def get_dashboard_data(db: Session, user_id: int, filter_region_id: int | None, filter_district_id: int | None, filter_store_id: int | None, hour_filter: str | None, kpi_date: str | None):
         user = UserRepository.get_user_by_id(db, user_id)
         if not user:
             raise ValueError("User not found")
@@ -82,27 +83,20 @@ class DashboardService:
                 scope_type = 'region'
                 scope_id = filter_region_id
 
-        # 2. Get latest date in daily store KPIs
-        latest_date = DashboardRepository.get_latest_kpi_date(db)
+        # 2. Resolve KPI date
+        selected_date = kpi_date or datetime.utcnow().date().isoformat()
+        resolved_date = DashboardRepository.resolve_kpi_date(db, selected_date)
 
         # 3. Get metrics
-        metrics = DashboardRepository.get_metrics_and_trends(db, scope_type, scope_id, latest_date)
+        metrics = DashboardRepository.get_metrics_and_trends(db, scope_type, scope_id, resolved_date)
         
-        # Apply hour filter multiplier just like in mock server
-        hour_factor = 1.0
-        if hour_filter == '7-9':
-            hour_factor = 0.30
-        elif hour_filter == '9-12':
-            hour_factor = 0.10
-        elif hour_filter == '12-15':
-            hour_factor = 0.35
-        elif hour_filter == '15-18':
-            hour_factor = 0.25
-
-        total_rev = metrics["total_revenue"] * hour_factor
-        total_ord = int(round(metrics["total_orders"] * hour_factor))
-        cust_cnt = int(round(metrics["customer_count"] * hour_factor))
-        canc_ord = int(round(metrics["cancelled_orders"] * hour_factor))
+        # Use the raw KPI values from the database for the dashboard display.
+        # The previous hour-based scaling was synthetic and caused the mismatch
+        # between database totals and the values shown in the UI.
+        total_rev = float(metrics["total_revenue"])
+        total_ord = int(metrics["total_orders"])
+        cust_cnt = int(metrics["customer_count"])
+        canc_ord = int(metrics["cancelled_orders"])
         avg_val = (total_rev / total_ord) if total_ord > 0 else 0.0
 
         # Calculations

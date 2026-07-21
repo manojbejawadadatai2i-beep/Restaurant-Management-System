@@ -1,3 +1,5 @@
+import os
+import re
 import bcrypt
 import jwt
 from datetime import datetime, timedelta, timezone
@@ -67,7 +69,11 @@ def login(request: LoginRequest):
             if result is None:
                 raise HTTPException(status_code=401, detail="Invalid email or password")
 
-            stored_hash = result["password_hash"]
+            stored_hash = result.get("password_hash")
+            # Allow password login by default for all users. If a user is truly Google-only,
+            # they can still sign in with Google; password login is only blocked when no password exists.
+            if result.get("login_method") == "google_only" and (not stored_hash or stored_hash.strip() == ""):
+                raise HTTPException(status_code=401, detail="This account does not have a password set. Please sign in with Google.")
 
             # Try bcrypt first, fallback to plaintext comparison if the DB has unhashed passwords
             try:
@@ -113,7 +119,10 @@ def login(request: LoginRequest):
             
             access_token = create_access_token(token_claims)
 
-            is_default_password = (stored_hash == "$2b$12$PLACEHOLDER_HASH" or request.password == "$2b$12$PLACEHOLDER_HASH")
+            # Determine if the user is using a default generated password
+            clean_username = re.sub(r'[^a-zA-Z0-9]', '', result.get('full_name') or result.get('username') or 'user')
+            default_password = f"{(clean_username[:4] or 'user').lower()}@123"
+            is_default_password = request.password == default_password
 
             return {
                 "message": "Login Successful",
@@ -143,12 +152,13 @@ def login(request: LoginRequest):
 def login_google(request: GoogleLoginRequest):
     settings = get_settings()
     try:
-        if not settings.google_client_id:
+        client_id = settings.google_client_id or os.getenv("GOOGLE_CLIENT_ID") or os.getenv("VITE_GOOGLE_CLIENT_ID")
+        if not client_id:
             raise HTTPException(status_code=500, detail="Google Client ID not configured")
             
         # Verify the Google id_token
         idinfo = id_token.verify_oauth2_token(
-            request.id_token, google_requests.Request(), settings.google_client_id
+            request.id_token, google_requests.Request(), client_id
         )
 
         email = idinfo.get("email")
@@ -164,6 +174,10 @@ def login_google(request: GoogleLoginRequest):
 
             if result is None:
                 raise HTTPException(status_code=401, detail="User not found. Please register first.")
+
+            # Allow Google login regardless of the stored `login_method` flag. If the account
+            # truly should be restricted, the DB can store an explicit value like
+            # 'google_only' or 'password_only' and additional checks can be added.
 
             # Fetch role name from the database
             role_result = conn.execute(

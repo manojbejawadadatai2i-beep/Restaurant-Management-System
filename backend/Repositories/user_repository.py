@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import func, text
 from datetime import datetime
 from models import User, Store, District, Region, Role
 
@@ -12,6 +12,7 @@ class UserRepository:
             User.full_name.label("username"),
             User.email,
             User.role_id,
+            User.login_method,
             User.store_id.label("assigned_store_id"),
             User.district_id.label("assigned_district_id"),
             User.region_id.label("assigned_region_id"),
@@ -29,7 +30,8 @@ class UserRepository:
 
     @staticmethod
     def get_user_by_email(db: Session, email: str):
-        return db.query(User).filter(User.email == email).first()
+        normalized_email = email.strip().lower()
+        return db.query(User).filter(func.lower(User.email) == normalized_email).first()
 
     @staticmethod
     def get_user_by_employee_id(db: Session, employee_id: str):
@@ -84,13 +86,15 @@ class UserRepository:
         return user
 
     @staticmethod
-    def update_user(db: Session, user_id: int, role_id: int, store_id: int | None, district_id: int | None, region_id: int | None):
+    def update_user(db: Session, user_id: int, role_id: int, store_id: int | None, district_id: int | None, region_id: int | None, login_method: str | None = None):
         user = db.query(User).filter(User.id == user_id).first()
         if user:
             user.role_id = role_id
             user.store_id = store_id
             user.district_id = district_id
             user.region_id = region_id
+            if login_method is not None:
+                user.login_method = login_method
             db.commit()
             return user
         return None

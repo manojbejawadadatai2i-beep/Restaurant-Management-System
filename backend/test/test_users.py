@@ -44,6 +44,10 @@ class TestUsersAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertTrue(data["success"])
+        self.assertEqual(data["username"], "Test User Name")
+        self.assertEqual(data["email"], "test_unique_email@restaurant.com")
+        self.assertEqual(data["role"], "Store Manager")
+        self.assertIn("password", data)
         user_id = data["userId"]
 
         # Verify created in DB
@@ -79,6 +83,33 @@ class TestUsersAPI(unittest.TestCase):
         # User ID 1 is seeded as Corporate Admin
         response = self.client.delete("/api/users/1")
         self.assertEqual(response.status_code, 403)
+
+    def test_recreate_deleted_user_with_same_email(self):
+        email = "recreate_email_test@restaurant.com"
+        create_payload = {
+            "username": "Recreate Test User",
+            "email": email,
+            "role": "Store Manager",
+            "assigned_store_id": "1",
+            "assigned_district_id": "1",
+            "assigned_region_id": "1",
+            "addNewStore": False
+        }
+
+        response = self.client.post("/api/users", json=create_payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["success"])
+        user_id = data["userId"]
+
+        delete_response = self.client.delete(f"/api/users/{user_id}")
+        self.assertEqual(delete_response.status_code, 200)
+
+        recreate_response = self.client.post("/api/users", json=create_payload)
+        self.assertEqual(recreate_response.status_code, 200)
+        recreate_data = recreate_response.json()
+        self.assertTrue(recreate_data["success"])
+        self.assertEqual(recreate_data["email"], email)
 
 if __name__ == "__main__":
     unittest.main()

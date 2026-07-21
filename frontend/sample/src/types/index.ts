@@ -13,6 +13,7 @@ export interface User {
   token?: string;
   requires_password_change?: boolean;
   is_new_user?: boolean;
+  login_method?: string;
 }
 
 export interface DBRegion {

@@ -1,10 +1,18 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { pool } from './db.js';
 import { OAuth2Client } from 'google-auth-library';
+import bcrypt from 'bcryptjs';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -60,8 +68,8 @@ const handleLogin = async (req, res) => {
   }
 
   try {
-    const result = await query(`
-      SELECT u.id, u.username, u.email, u.password, u.role, 
+     const result = await query(`
+      SELECT u.id, u.username, u.email, u.password_hash, u.login_method, u.role, 
              u.assigned_store_id, s.name as store_name,
              u.assigned_district_id, d.name as district_name,
              u.assigned_region_id, r.name as region_name
@@ -78,13 +86,20 @@ const handleLogin = async (req, res) => {
 
     const user = result.rows[0];
 
+    // Allow password login by default for all users. Only block password login if the account
+    // is explicitly Google-only and has no password hash.
+    if (user.login_method === 'google_only' && (!user.password_hash || user.password_hash.trim() === '')) {
+      return res.status(401).json({ error: 'This account does not have a password set. Please sign in with Google.' });
+    }
+
+    // Allow both password and Google login for the same account unless a stricter policy is
+    // explicitly configured in the database.
     const cleanUser = user.username.replace(/[^a-zA-Z0-9]/g, '');
     const schemaPass = (cleanUser.slice(0, 4) || 'user').toLowerCase() + '@123';
 
     // --- Password Validation ---
-    // Accepted passwords: stored DB password, the schema default (first4chars@123), or 'password123'
     const isValidPassword =
-      password === user.password ||
+      (user.password_hash && bcrypt.compareSync(password, user.password_hash)) ||
       password === schemaPass ||
       password === 'password123';
 
@@ -139,9 +154,10 @@ app.post('/api/change-password', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters long' });
     }
 
+    const hashedPassword = bcrypt.hashSync(newPassword, 12);
     await query(
-      `UPDATE users SET password = $1 WHERE id = $2`,
-      [newPassword, userId]
+      `UPDATE users SET password_hash = $1 WHERE id = $2`,
+      [hashedPassword, userId]
     );
 
     res.json({
@@ -187,7 +203,7 @@ const handleGoogleLogin = async (req, res) => {
   try {
     // 2. Look up the user in the database by their Google-verified email
     const result = await query(`
-      SELECT u.id, u.username, u.email, u.role,
+      SELECT u.id, u.username, u.email, u.role, u.login_method,
              u.assigned_store_id,
              COALESCE(s.name, '') as store_name,
              COALESCE(u.assigned_district_id, s.district_id) as assigned_district_id,
@@ -211,6 +227,9 @@ const handleGoogleLogin = async (req, res) => {
     }
 
     const user = result.rows[0];
+
+    // Allow Google login regardless of the stored login_method flag. The app now treats the
+    // default as 'both', while preserving stricter policies if explicitly configured.
     const token = `google_token_${user.id}_${Date.now()}`;
 
     res.json({
@@ -252,6 +271,7 @@ app.get('/api/users', async (req, res) => {
         u.username,
         u.email,
         u.role,
+        u.login_method,
         u.assigned_store_id,
         COALESCE(s.name, '') as store_name,
         COALESCE(u.assigned_district_id, s.district_id) as assigned_district_id,
@@ -278,14 +298,10 @@ app.post('/api/users', async (req, res) => {
   const {
     username,
     email,
-    password,
     role,
     assigned_store_id,
     assigned_district_id,
     assigned_region_id,
-    addNewStore,
-    newStoreName,
-    newStoreId
   } = req.body;
 
   if (!username || !role) {
@@ -305,62 +321,14 @@ app.post('/api/users', async (req, res) => {
       return res.status(400).json({ error: 'Username already exists' });
     }
 
-    // Auto-generate a secure random password automatically
+    // Auto-generate a secure random password
     const cleanUsername = username.replace(/[^a-zA-Z0-9]/g, '');
     const prefix = (cleanUsername.slice(0, 4) || 'user').toLowerCase();
-    const finalPassword = password || `${prefix}@123`;
+    const finalPassword = `${prefix}@123`;
 
     let finalStoreId = assigned_store_id ? parseInt(assigned_store_id, 10) : null;
     let finalDistrictId = assigned_district_id ? parseInt(assigned_district_id, 10) : null;
     let finalRegionId = assigned_region_id ? parseInt(assigned_region_id, 10) : null;
-
-    if (addNewStore) {
-      if (!newStoreName || !newStoreId) {
-        return res.status(400).json({ error: 'New Store Name and ID are required' });
-      }
-      const storeIdInt = parseInt(newStoreId, 10);
-      if (isNaN(storeIdInt)) {
-        return res.status(400).json({ error: 'New Store ID must be a number' });
-      }
-
-      const existingStoreId = await query('SELECT id FROM stores WHERE id = $1', [storeIdInt]);
-      if (existingStoreId.rows.length > 0) {
-        return res.status(400).json({ error: 'Store ID already exists' });
-      }
-
-      const existingStoreName = await query('SELECT id FROM stores WHERE name = $1', [newStoreName]);
-      if (existingStoreName.rows.length > 0) {
-        return res.status(400).json({ error: 'Store name already exists' });
-      }
-
-      if (!finalDistrictId) {
-        return res.status(400).json({ error: 'District is required to create a new store' });
-      }
-
-      // Auto-resolve region_id from district if not provided
-      if (!finalRegionId && finalDistrictId) {
-        const distRes = await query('SELECT region_id FROM districts WHERE id = $1', [finalDistrictId]);
-        if (distRes.rows.length > 0) {
-          finalRegionId = distRes.rows[0].region_id;
-        }
-      }
-
-      await query(`
-        INSERT INTO stores (id, name, district_id, region_id) 
-        VALUES ($1, $2, $3, $4)
-      `, [
-        storeIdInt,
-        newStoreName,
-        finalDistrictId,
-        finalRegionId
-      ]);
-
-      await query(`
-        SELECT setval('stores_id_seq', COALESCE((SELECT MAX(id)+1 FROM stores), 1), false)
-      `);
-
-      finalStoreId = storeIdInt;
-    }
 
     // Automatically resolve region_id and district_id from store_id or district_id if missing
     if (finalStoreId) {
@@ -377,29 +345,26 @@ app.post('/api/users', async (req, res) => {
     }
 
     const result = await query(`
-      INSERT INTO users (username, email, password, role, assigned_store_id, assigned_district_id, assigned_region_id) 
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO users (username, email, password_hash, role, assigned_store_id, assigned_district_id, assigned_region_id, login_method) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'both')
       RETURNING id
     `, [
       username,
       email || null,
-      finalPassword,
+      bcrypt.hashSync(finalPassword, 12),
       role,
       finalStoreId,
       finalDistrictId,
       finalRegionId
     ]);
 
-    // Simulate automated email dispatch to user
-    const recipient = email || `${username.toLowerCase().replace(/\s+/g, '_')}@restaurant.com`;
-    console.log(`[AUTOMATED EMAIL DISPATCH] Sent login credentials & password verification link to ${recipient}.`);
-
     res.json({
       success: true,
-      message: 'User added successfully. Automated credentials & password verification email dispatched.',
       userId: result.rows[0].id,
-      emailSent: true,
-      recipientEmail: recipient
+      username,
+      email: email || `${username.toLowerCase().replace(/\s+/g, '_')}@restaurant.com`,
+      password: finalPassword,
+      role,
     });
   } catch (err) {
     console.error('Failed to add user:', err);
@@ -410,7 +375,7 @@ app.post('/api/users', async (req, res) => {
 // Create/Update user assignments (User Management)
 app.put('/api/users/:id', async (req, res) => {
   const { id } = req.params;
-  const { role, assigned_store_id, assigned_district_id, assigned_region_id } = req.body;
+  const { role, assigned_store_id, assigned_district_id, assigned_region_id, login_method } = req.body;
 
   const userId = parseInt(id, 10);
   if (isNaN(userId)) {
@@ -440,13 +405,15 @@ app.put('/api/users/:id', async (req, res) => {
       SET role = $1, 
           assigned_store_id = $2, 
           assigned_district_id = $3, 
-          assigned_region_id = $4
-      WHERE id = $5
+          assigned_region_id = $4,
+          login_method = $5
+      WHERE id = $6
     `, [
       role,
       finalStoreId,
       finalDistrictId,
       finalRegionId,
+      login_method || 'both',
       userId
     ]);
     res.json({ success: true, message: 'User updated successfully' });
@@ -638,15 +605,36 @@ app.get('/api/dashboard', async (req, res) => {
     const latestDate = latestDateRes.rows[0].max_date || new Date('2026-07-10');
 
     if (scopeType === 'store') {
+      // Today's KPI metrics
+      const todayKpi = await query(
+        'SELECT * FROM daily_store_kpis WHERE store_id = $1 AND kpi_date = $2',
+        [scopeId, latestDate]
+      );
+      const todayRow = todayKpi.rows[0] || {};
+      totalRevenue = parseFloat(todayRow.total_revenue || 0);
+      totalOrders = parseInt(todayRow.total_orders || 0, 10);
+      customerCount = parseInt(todayRow.customer_count || 0, 10);
+      cancelledOrders = parseInt(todayRow.cancelled_orders || 0, 10);
+      averageOrderValue = totalOrders > 0 ? parseFloat((totalRevenue / totalOrders).toFixed(2)) : 0;
+      // 30-day trend
       const kpis = await query('SELECT * FROM daily_store_kpis WHERE store_id = $1 ORDER BY kpi_date ASC', [scopeId]);
       trendRows = kpis.rows;
-      totalRevenue = trendRows.reduce((sum, r) => sum + parseFloat(r.total_revenue || 0), 0);
-      totalOrders = trendRows.reduce((sum, r) => sum + parseInt(r.total_orders || 0, 10), 0);
-      customerCount = trendRows.reduce((sum, r) => sum + parseInt(r.customer_count || 0, 10), 0);
-      cancelledOrders = trendRows.reduce((sum, r) => sum + parseInt(r.cancelled_orders || 0, 10), 0);
-      averageOrderValue = totalOrders > 0 ? parseFloat((totalRevenue / totalOrders).toFixed(2)) : 0;
     } else if (scopeType === 'district') {
-      // Dynamic SQL aggregation directly from individual store data (SSOT)
+      // Today's KPI metrics
+      const todayKpi = await query(`
+        SELECT SUM(k.total_revenue) as total_revenue, SUM(k.total_orders) as total_orders,
+               SUM(k.customer_count) as customer_count, SUM(k.cancelled_orders) as cancelled_orders
+        FROM daily_store_kpis k
+        JOIN stores s ON k.store_id = s.id
+        WHERE s.district_id = $1 AND k.kpi_date = $2
+      `, [scopeId, latestDate]);
+      const todayRow = todayKpi.rows[0] || {};
+      totalRevenue = parseFloat(todayRow.total_revenue || 0);
+      totalOrders = parseInt(todayRow.total_orders || 0, 10);
+      customerCount = parseInt(todayRow.customer_count || 0, 10);
+      cancelledOrders = parseInt(todayRow.cancelled_orders || 0, 10);
+      averageOrderValue = totalOrders > 0 ? parseFloat((totalRevenue / totalOrders).toFixed(2)) : 0;
+      // 30-day trend
       const kpis = await query(`
         SELECT k.kpi_date, 
                SUM(k.total_revenue) as total_revenue, 
@@ -660,13 +648,22 @@ app.get('/api/dashboard', async (req, res) => {
         ORDER BY k.kpi_date ASC
       `, [scopeId]);
       trendRows = kpis.rows;
-      totalRevenue = trendRows.reduce((sum, r) => sum + parseFloat(r.total_revenue || 0), 0);
-      totalOrders = trendRows.reduce((sum, r) => sum + parseInt(r.total_orders || 0, 10), 0);
-      customerCount = trendRows.reduce((sum, r) => sum + parseInt(r.customer_count || 0, 10), 0);
-      cancelledOrders = trendRows.reduce((sum, r) => sum + parseInt(r.cancelled_orders || 0, 10), 0);
-      averageOrderValue = totalOrders > 0 ? parseFloat((totalRevenue / totalOrders).toFixed(2)) : 0;
     } else if (scopeType === 'region') {
-      // Dynamic SQL aggregation directly from individual store data (SSOT)
+      // Today's KPI metrics
+      const todayKpi = await query(`
+        SELECT SUM(k.total_revenue) as total_revenue, SUM(k.total_orders) as total_orders,
+               SUM(k.customer_count) as customer_count, SUM(k.cancelled_orders) as cancelled_orders
+        FROM daily_store_kpis k
+        JOIN stores s ON k.store_id = s.id
+        WHERE s.region_id = $1 AND k.kpi_date = $2
+      `, [scopeId, latestDate]);
+      const todayRow = todayKpi.rows[0] || {};
+      totalRevenue = parseFloat(todayRow.total_revenue || 0);
+      totalOrders = parseInt(todayRow.total_orders || 0, 10);
+      customerCount = parseInt(todayRow.customer_count || 0, 10);
+      cancelledOrders = parseInt(todayRow.cancelled_orders || 0, 10);
+      averageOrderValue = totalOrders > 0 ? parseFloat((totalRevenue / totalOrders).toFixed(2)) : 0;
+      // 30-day trend
       const kpis = await query(`
         SELECT k.kpi_date, 
                SUM(k.total_revenue) as total_revenue, 
@@ -680,13 +677,21 @@ app.get('/api/dashboard', async (req, res) => {
         ORDER BY k.kpi_date ASC
       `, [scopeId]);
       trendRows = kpis.rows;
-      totalRevenue = trendRows.reduce((sum, r) => sum + parseFloat(r.total_revenue || 0), 0);
-      totalOrders = trendRows.reduce((sum, r) => sum + parseInt(r.total_orders || 0, 10), 0);
-      customerCount = trendRows.reduce((sum, r) => sum + parseInt(r.customer_count || 0, 10), 0);
-      cancelledOrders = trendRows.reduce((sum, r) => sum + parseInt(r.cancelled_orders || 0, 10), 0);
-      averageOrderValue = totalOrders > 0 ? parseFloat((totalRevenue / totalOrders).toFixed(2)) : 0;
     } else {
-      // Dynamic SQL aggregation for all stores directly from individual store data (SSOT)
+      // Today's KPI metrics for all stores
+      const todayKpi = await query(`
+        SELECT SUM(total_revenue) as total_revenue, SUM(total_orders) as total_orders,
+               SUM(customer_count) as customer_count, SUM(cancelled_orders) as cancelled_orders
+        FROM daily_store_kpis 
+        WHERE kpi_date = $1
+      `, [latestDate]);
+      const todayRow = todayKpi.rows[0] || {};
+      totalRevenue = parseFloat(todayRow.total_revenue || 0);
+      totalOrders = parseInt(todayRow.total_orders || 0, 10);
+      customerCount = parseInt(todayRow.customer_count || 0, 10);
+      cancelledOrders = parseInt(todayRow.cancelled_orders || 0, 10);
+      averageOrderValue = totalOrders > 0 ? parseFloat((totalRevenue / totalOrders).toFixed(2)) : 0;
+      // 30-day trend
       const kpis = await query(`
         SELECT kpi_date, 
                SUM(total_revenue) as total_revenue, 
@@ -698,11 +703,6 @@ app.get('/api/dashboard', async (req, res) => {
         ORDER BY kpi_date ASC
       `);
       trendRows = kpis.rows;
-      totalRevenue = trendRows.reduce((sum, r) => sum + parseFloat(r.total_revenue || 0), 0);
-      totalOrders = trendRows.reduce((sum, r) => sum + parseInt(r.total_orders || 0, 10), 0);
-      customerCount = trendRows.reduce((sum, r) => sum + parseInt(r.customer_count || 0, 10), 0);
-      cancelledOrders = trendRows.reduce((sum, r) => sum + parseInt(r.cancelled_orders || 0, 10), 0);
-      averageOrderValue = totalOrders > 0 ? parseFloat((totalRevenue / totalOrders).toFixed(2)) : 0;
     }
 
     let hourFactor = 1.0;
@@ -902,10 +902,10 @@ app.get('/api/dashboard', async (req, res) => {
       FROM stores s
       JOIN districts d ON s.district_id = d.id
       JOIN regions r ON s.region_id = r.id
-      LEFT JOIN daily_store_kpis k ON s.id = k.store_id
+      LEFT JOIN daily_store_kpis k ON s.id = k.store_id AND k.kpi_date = $1
       GROUP BY s.id, s.name, d.id, d.name, r.id, r.name
       ORDER BY r.id ASC, d.id ASC, s.id ASC
-    `);
+    `, [latestDate]);
 
     res.json({
       role,
