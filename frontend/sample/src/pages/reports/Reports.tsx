@@ -4,11 +4,8 @@ import * as XLSX from 'xlsx';
 import api from '../../utils/axios';
 import { useAuth } from '../../hooks/useAuth';
 import { 
-  FileText, 
   Download, 
   CalendarDays,
-  Store,
-  Filter,
   Receipt,
   IndianRupee,
   ShoppingBag,
@@ -68,31 +65,19 @@ export const Reports: React.FC = () => {
   const { currentUser } = useAuth();
   const [fromDate, setFromDate] = useState('2026-07-01');
   const [toDate, setToDate] = useState('2026-07-21');
-  const [selectedStoreId, setSelectedStoreId] = useState('all');
   const [activeTab, setActiveTab] = useState<'kpis' | 'orders'>('kpis');
 
-  // Fetch stores for filter dropdown
-  const { data: storesList } = useQuery({
-    queryKey: ['storesListReport'],
-    queryFn: async () => {
-      const res = await api.get('/api/stores');
-      return res.data;
-    }
-  });
-
-  // Fetch custom report data
+  // Fetch custom report data based on logged-in user scope & selected date range
   const { 
     data: reportData, 
     isLoading, 
-    isError,
-    refetch
+    isError
   } = useQuery<CustomReportResponse>({
-    queryKey: ['customReport', currentUser?.id, selectedStoreId, fromDate, toDate],
+    queryKey: ['customReport', currentUser?.id, fromDate, toDate],
     queryFn: async () => {
       const res = await api.get('/api/reports/custom-excel', {
         params: { 
           userId: currentUser?.id,
-          storeId: selectedStoreId,
           fromDate,
           toDate
         }
@@ -112,7 +97,7 @@ export const Reports: React.FC = () => {
     const kpiSummaryRows = [
       ['RESTAURANT PORTAL - KPI & OPERATIONS AGGREGATION REPORT'],
       [`Date Range: ${fromDate} to ${toDate}`],
-      [`Store Scope: ${selectedStoreId === 'all' ? 'All Operational Stores' : `Store #${selectedStoreId}`}`],
+      [`Scope: Automatically Resolved for ${currentUser?.email || 'User Session'}`],
       [`Generated On: ${new Date().toLocaleString()}`],
       [],
       ['KPI SUMMARY AGGREGATIONS'],
@@ -155,7 +140,7 @@ export const Reports: React.FC = () => {
     const orderRows = [
       ['ITEMIZED ORDERS TRANSACTION LOG'],
       [`Date Range: ${fromDate} to ${toDate}`],
-      [`Scope: ${selectedStoreId === 'all' ? 'All Stores' : `Store #${selectedStoreId}`}`],
+      [`User: ${currentUser?.email || 'User Session'}`],
       [],
       ['Order ID', 'Store Name', 'Customer Name', 'Items Taken (Order Breakdown)', 'Order Timestamp', 'Status', 'Total Amount (INR)']
     ];
@@ -177,8 +162,7 @@ export const Reports: React.FC = () => {
     XLSX.utils.book_append_sheet(wb, ordersWs, 'Itemized Orders Log');
 
     // Generate and trigger download
-    const storeLabel = selectedStoreId === 'all' ? 'All_Stores' : `Store_${selectedStoreId}`;
-    const filename = `Restaurant_Report_${storeLabel}_${fromDate}_to_${toDate}.xlsx`;
+    const filename = `Restaurant_Report_${fromDate}_to_${toDate}.xlsx`;
     XLSX.writeFile(wb, filename);
   };
 
@@ -207,36 +191,17 @@ export const Reports: React.FC = () => {
             <Button
               onClick={handleExportExcel}
               disabled={isLoading || isError || !reportData}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl shadow-md shadow-emerald-600/20 flex items-center gap-2"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl shadow-md shadow-emerald-600/20 flex items-center gap-2 cursor-pointer"
             >
-              <FileSpreadsheet size={17} />
+              <Download size={17} />
               <span>Export Excel (.xlsx)</span>
             </Button>
           </div>
         </CardHeader>
       </Card>
 
-      {/* 2. Interactive Date Range & Store Filters */}
+      {/* 2. Interactive Date Range Filters */}
       <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm flex flex-col md:flex-row items-stretch md:items-center gap-4">
-        {/* Store Selection Dropdown */}
-        <div className="flex flex-col gap-1 flex-1">
-          <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-            <Store size={13} /> Select Store Scope
-          </label>
-          <select
-            value={selectedStoreId}
-            onChange={(e) => setSelectedStoreId(e.target.value)}
-            className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-          >
-            <option value="all">🏬 All Operational Stores (System-Wide)</option>
-            {storesList?.map((s: any) => (
-              <option key={s.id} value={s.id.toString()}>
-                🏪 {s.name} ({s.district_name || 'District'})
-              </option>
-            ))}
-          </select>
-        </div>
-
         {/* From Date Picker */}
         <div className="flex flex-col gap-1 flex-1">
           <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1">
@@ -261,17 +226,6 @@ export const Reports: React.FC = () => {
             onChange={(e) => setToDate(e.target.value)}
             className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
           />
-        </div>
-
-        {/* Action button */}
-        <div className="flex flex-col justify-end">
-          <Button
-            onClick={() => refetch()}
-            className="h-10 px-5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-md shadow-orange-500/20"
-          >
-            <Filter size={15} className="mr-1.5" />
-            <span>Update Aggregations</span>
-          </Button>
         </div>
       </div>
 
@@ -369,16 +323,6 @@ export const Reports: React.FC = () => {
                 <span>Itemized Orders Log ({reportData?.orders.length || 0})</span>
               </button>
             </div>
-
-            <Button
-              onClick={handleExportExcel}
-              disabled={isLoading || isError || !reportData}
-              variant="outline"
-              size="sm"
-              leftIcon={<Download size={14} />}
-            >
-              Export Workbook (.xlsx)
-            </Button>
           </div>
         </CardHeader>
 
@@ -422,7 +366,6 @@ export const Reports: React.FC = () => {
                         </TableCell>
                         <TableCell className="font-bold text-slate-900 dark:text-white py-3.5">
                           <div className="flex items-center gap-1.5">
-                            <Store size={14} className="text-orange-500" />
                             <span className="text-xs font-bold">{item.store_name}</span>
                           </div>
                         </TableCell>
@@ -506,7 +449,6 @@ export const Reports: React.FC = () => {
                           </TableCell>
                           <TableCell className="py-3.5">
                             <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
-                              <Store size={14} className="text-blue-500" />
                               {ord.store_name}
                             </span>
                           </TableCell>

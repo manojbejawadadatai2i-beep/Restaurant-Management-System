@@ -157,15 +157,29 @@ export const Dashboard: React.FC = () => {
     }
   }, [searchParams]);
 
-  // Primary TanStack Query: Fetch base dashboard analytics for selected date
+  // Primary TanStack Query: Fetch base dashboard analytics for selected date & scope filters from PostgreSQL
   const { data, isLoading, isError } = useQuery<DashboardResponse>({
-    queryKey: ['dashboardData', currentUser?.id, selectedDate],
+    queryKey: [
+      'dashboardData', 
+      currentUser?.id, 
+      currentUser?.role, 
+      currentUser?.assigned_store_id, 
+      currentUser?.assigned_district_id, 
+      currentUser?.assigned_region_id, 
+      selectedDate,
+      filterRegion,
+      filterDistrict,
+      filterStore
+    ],
     queryFn: async () => {
       if (!currentUser) throw new Error('No user authenticated');
       const response = await api.get('/api/dashboard', {
         params: {
           userId: currentUser.id,
-          kpiDate: selectedDate || undefined
+          kpiDate: selectedDate || undefined,
+          filterRegionId: filterRegion || undefined,
+          filterDistrictId: filterDistrict || undefined,
+          filterStoreId: filterStore || undefined
         }
       });
       return response.data;
@@ -173,93 +187,18 @@ export const Dashboard: React.FC = () => {
     enabled: !!currentUser
   });
 
-  // FRONTEND ONLY FILTERING: Dynamically re-compute scope metrics and charts without backend round-trips
+  // Return exact database-queried metrics & charts directly from PostgreSQL
   const activeData = React.useMemo(() => {
     if (!data) return null;
-
-    const allStores = data.scopeTable || [];
-    const hasFilter = Boolean(filterRegion || filterDistrict || filterStore);
-
-    if (!hasFilter) {
-      return {
-        metrics: data.metrics,
-        scopeTable: allStores,
-        scopeName: data.scopeName || 'All Stores',
-        revenueTrend: data.revenueTrend || [],
-        orderDistribution: data.orderDistribution || [],
-        peakHours: data.peakHours || []
-      };
-    }
-
-    const filteredStores = allStores.filter(s => {
-      if (filterStore && s.store_id !== parseInt(filterStore, 10)) return false;
-      if (filterDistrict && s.district_id !== parseInt(filterDistrict, 10)) return false;
-      if (filterRegion && s.region_id !== parseInt(filterRegion, 10)) return false;
-      return true;
-    });
-
-    const totRev = filteredStores.reduce((sum, s) => sum + Number(s.total_revenue || 0), 0);
-    const totOrd = filteredStores.reduce((sum, s) => sum + Number(s.total_orders || 0), 0);
-    const avgVal = totOrd > 0 ? parseFloat((totRev / totOrd).toFixed(2)) : 0;
-    const totCost = parseFloat((totRev * 0.58).toFixed(2));
-    const totProfit = parseFloat((totRev - totCost).toFixed(2));
-    const margin = totRev > 0 ? Math.round((totProfit / totRev) * 100) : 0;
-    const custCount = Math.round(totOrd * 1.25);
-    const cancRate = totOrd > 0 ? Math.round((totOrd * 0.02) / totOrd * 100) : 0;
-
-    let sName = data.scopeName;
-    if (filterStore) {
-      const matchS = stores.find(st => st.id === parseInt(filterStore, 10));
-      if (matchS) sName = matchS.name;
-    } else if (filterDistrict) {
-      const matchD = districts.find(dt => dt.id === parseInt(filterDistrict, 10));
-      if (matchD) sName = matchD.name;
-    } else if (filterRegion) {
-      const matchR = regions.find(rg => rg.id === parseInt(filterRegion, 10));
-      if (matchR) sName = matchR.name;
-    }
-
-    const scaleFactor = data.metrics.totalRevenue > 0 ? totRev / data.metrics.totalRevenue : 1;
-
-    const scaledTrend = (data.revenueTrend || []).map(pt => ({
-      ...pt,
-      revenue: parseFloat((pt.revenue * scaleFactor).toFixed(2)),
-      profit: parseFloat((pt.profit * scaleFactor).toFixed(2)),
-      orders: Math.round((pt.orders || 0) * scaleFactor),
-      Completed: Math.round((pt.Completed || 0) * scaleFactor),
-      Cancelled: Math.round((pt.Cancelled || 0) * scaleFactor)
-    }));
-
-    const scaledDistribution = (data.orderDistribution || []).map(dist => ({
-      ...dist,
-      value: Math.round(dist.value * scaleFactor)
-    }));
-
-    const scaledPeakHours = (data.peakHours || []).map(ph => ({
-      ...ph,
-      Completed: Math.round(ph.Completed * scaleFactor),
-      Cancelled: Math.round(ph.Cancelled * scaleFactor)
-    }));
-
     return {
-      metrics: {
-        totalRevenue: totRev,
-        totalOrders: totOrd,
-        totalCustomers: custCount,
-        totalMenuItems: data.metrics.totalMenuItems,
-        totalCost: totCost,
-        totalProfit: totProfit,
-        profitMargin: margin,
-        avgOrderValue: avgVal,
-        cancellationRate: cancRate
-      },
-      scopeTable: filteredStores,
-      scopeName: sName,
-      revenueTrend: scaledTrend,
-      orderDistribution: scaledDistribution,
-      peakHours: scaledPeakHours
+      metrics: data.metrics,
+      scopeTable: data.scopeTable || [],
+      scopeName: data.scopeName || 'All Stores',
+      revenueTrend: data.revenueTrend || [],
+      orderDistribution: data.orderDistribution || [],
+      peakHours: data.peakHours || []
     };
-  }, [data, filterRegion, filterDistrict, filterStore, stores, districts, regions]);
+  }, [data]);
 
   const [itemTab, setItemTab] = useState<'top' | 'lowest'>('top');
   const activeMetrics = activeData?.metrics || data?.metrics;
@@ -324,6 +263,29 @@ export const Dashboard: React.FC = () => {
   } | null>(null);
   const [isLlmLoading, setIsLlmLoading] = useState(false);
 
+  const cacheKey = `llm_insights_${activeScopeName}_${selectedDate}_${activeMetrics?.totalRevenue || 0}`;
+
+  // Automatically trigger AI insights ONCE on initial login, then restore from cache on page shifts
+  useEffect(() => {
+    if (!activeMetrics) return;
+    try {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        setLlmInsights(JSON.parse(cached));
+      } else {
+        const hasAutoGeneratedOnLogin = sessionStorage.getItem('has_auto_generated_insights_login');
+        if (!hasAutoGeneratedOnLogin) {
+          sessionStorage.setItem('has_auto_generated_insights_login', 'true');
+          fetchGroqInsights();
+        } else {
+          setLlmInsights(null);
+        }
+      }
+    } catch (e) {
+      setLlmInsights(null);
+    }
+  }, [cacheKey]);
+
   const fetchGroqInsights = async () => {
     if (!activeMetrics) return;
     setIsLlmLoading(true);
@@ -334,11 +296,18 @@ export const Dashboard: React.FC = () => {
         average_order_value: activeMetrics.avgOrderValue,
         customer_count: activeMetrics.totalCustomers,
         cancelled_orders: Math.round((activeMetrics.cancellationRate * activeMetrics.totalOrders) / 100),
-        total_expenses: activeMetrics.totalCost || 0,
-        scope_name: activeScopeName
+        total_expenses: Number((activeMetrics.totalCost || (activeMetrics.totalRevenue * 0.58)).toFixed(2)),
+        scope_name: activeScopeName,
+        past_data_trend: activeRevenueTrend,
+        order_channel_distribution: activeOrderDistribution
       });
       if (response.data.status === 'success' && response.data.insights) {
         setLlmInsights(response.data.insights);
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify(response.data.insights));
+        } catch (e) {
+          // sessionStorage full or disabled
+        }
       }
     } catch (err) {
       console.error('Failed to fetch Groq LLM insights:', err);
@@ -346,12 +315,6 @@ export const Dashboard: React.FC = () => {
       setIsLlmLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (activeMetrics) {
-      fetchGroqInsights();
-    }
-  }, [data]);
 
   // Frontend-only handler updates
   const handleRegionChange = (val: string) => {
@@ -993,7 +956,12 @@ export const Dashboard: React.FC = () => {
                     }
 
                     return (
-                      <TableRow key={store.store_id} className={isMyStore ? 'bg-indigo-50/70 dark:bg-indigo-950/30 border-l-4 border-l-indigo-600' : rank === 1 ? 'bg-amber-50/20 dark:bg-amber-950/10' : ''}>
+                      <TableRow 
+                        key={store.store_id} 
+                        onClick={() => handleStoreChange(store.store_id.toString())}
+                        title="Click to filter store dashboard"
+                        className={`cursor-pointer transition-colors hover:bg-blue-50/60 dark:hover:bg-slate-800/60 ${isMyStore ? 'bg-indigo-50/70 dark:bg-indigo-950/30 border-l-4 border-l-indigo-600' : rank === 1 ? 'bg-amber-50/20 dark:bg-amber-950/10' : ''}`}
+                      >
                         <TableCell className="py-3.5">{rankBadge}</TableCell>
                         <TableCell className="font-bold text-slate-900 dark:text-white py-3.5">
                           <div className="flex items-center gap-2">
@@ -1185,10 +1153,14 @@ export const Dashboard: React.FC = () => {
           <button 
             onClick={fetchGroqInsights}
             disabled={isLlmLoading}
-            className="flex items-center gap-1.5 text-[10px] font-bold text-violet-600 dark:text-violet-400 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 dark:hover:bg-violet-950/70 border border-violet-200 dark:border-violet-800 px-3 py-1 rounded-lg transition-all cursor-pointer disabled:opacity-50"
+            className={`flex items-center gap-1.5 text-xs font-extrabold px-4 py-1.5 rounded-xl transition-all cursor-pointer disabled:opacity-50 ${
+              llmInsights 
+                ? 'text-violet-600 dark:text-violet-400 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800'
+                : 'text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 shadow-md shadow-violet-500/20'
+            }`}
           >
-            <Sparkles size={12} className={isLlmLoading ? "animate-spin text-violet-500" : "text-violet-500"} />
-            {isLlmLoading ? 'Analyzing...' : 'Refresh AI Insights'}
+            <Sparkles size={14} className={isLlmLoading ? "animate-spin" : ""} />
+            {isLlmLoading ? 'Generating AI Analysis...' : llmInsights ? 'Refresh AI Insights' : '✨ Generate AI Insights'}
           </button>
         </div>
 

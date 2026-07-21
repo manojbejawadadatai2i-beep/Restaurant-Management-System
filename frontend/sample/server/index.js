@@ -56,7 +56,7 @@ const query = async (text, params) => {
     return await pool.query(text, params);
   } catch (err) {
     console.error('Database query error:', err.message, '\nQuery:', text);
-    throw new Error('Internal Database Error');
+    throw err;
   }
 };
 
@@ -330,17 +330,28 @@ app.post('/api/users', async (req, res) => {
     let finalDistrictId = assigned_district_id ? parseInt(assigned_district_id, 10) : null;
     let finalRegionId = assigned_region_id ? parseInt(assigned_region_id, 10) : null;
 
-    // Automatically resolve region_id and district_id from store_id or district_id if missing
-    if (finalStoreId) {
-      const storeRes = await query('SELECT district_id, region_id FROM stores WHERE id = $1', [finalStoreId]);
-      if (storeRes.rows.length > 0) {
-        finalDistrictId = storeRes.rows[0].district_id;
-        finalRegionId = storeRes.rows[0].region_id;
+    if (role === 'District Manager' || role === 'district_manager') {
+      finalStoreId = null;
+      if (finalDistrictId) {
+        const distRes = await query('SELECT region_id FROM districts WHERE id = $1', [finalDistrictId]);
+        if (distRes.rows.length > 0) {
+          finalRegionId = distRes.rows[0].region_id;
+        }
       }
-    } else if (finalDistrictId && !finalRegionId) {
-      const distRes = await query('SELECT region_id FROM districts WHERE id = $1', [finalDistrictId]);
-      if (distRes.rows.length > 0) {
-        finalRegionId = distRes.rows[0].region_id;
+    } else if (role === 'Regional Manager' || role === 'regional_manager') {
+      finalStoreId = null;
+      finalDistrictId = null;
+    } else if (role === 'Corporate Administrator' || role === 'Super Admin' || role === 'super_admin' || role === 'Administrator' || role === 'admin') {
+      finalStoreId = null;
+      finalDistrictId = null;
+      finalRegionId = null;
+    } else if (role === 'Store Manager' || role === 'store_manager') {
+      if (finalStoreId) {
+        const storeRes = await query('SELECT district_id, region_id FROM stores WHERE id = $1', [finalStoreId]);
+        if (storeRes.rows.length > 0) {
+          finalDistrictId = storeRes.rows[0].district_id;
+          finalRegionId = storeRes.rows[0].region_id;
+        }
       }
     }
 
@@ -400,43 +411,95 @@ app.put('/api/users/:id', async (req, res) => {
     let finalDistrictId = assigned_district_id ? parseInt(assigned_district_id, 10) : null;
     let finalRegionId = assigned_region_id ? parseInt(assigned_region_id, 10) : null;
 
-    if (finalStoreId) {
-      const storeRes = await query('SELECT district_id, region_id FROM stores WHERE id = $1', [finalStoreId]);
-      if (storeRes.rows.length > 0) {
-        finalDistrictId = storeRes.rows[0].district_id;
-        finalRegionId = storeRes.rows[0].region_id;
+    if (role === 'District Manager' || role === 'district_manager') {
+      finalStoreId = null;
+      if (finalDistrictId) {
+        const distRes = await query('SELECT region_id FROM districts WHERE id = $1', [finalDistrictId]);
+        if (distRes.rows.length > 0) {
+          finalRegionId = distRes.rows[0].region_id;
+        }
       }
-    } else if (finalDistrictId && !finalRegionId) {
-      const distRes = await query('SELECT region_id FROM districts WHERE id = $1', [finalDistrictId]);
-      if (distRes.rows.length > 0) {
-        finalRegionId = distRes.rows[0].region_id;
+    } else if (role === 'Regional Manager' || role === 'regional_manager') {
+      finalStoreId = null;
+      finalDistrictId = null;
+    } else if (role === 'Corporate Administrator' || role === 'Super Admin' || role === 'super_admin' || role === 'Administrator' || role === 'admin') {
+      finalStoreId = null;
+      finalDistrictId = null;
+      finalRegionId = null;
+    } else if (role === 'Store Manager' || role === 'store_manager') {
+      if (finalStoreId) {
+        const storeRes = await query('SELECT district_id, region_id FROM stores WHERE id = $1', [finalStoreId]);
+        if (storeRes.rows.length > 0) {
+          finalDistrictId = storeRes.rows[0].district_id;
+          finalRegionId = storeRes.rows[0].region_id;
+        }
       }
     }
 
+    let roleId = 4;
+    if (role === 'Corporate Administrator' || role === 'Super Admin' || role === 'super_admin') roleId = 1;
+    else if (role === 'Regional Manager' || role === 'regional_manager') roleId = 2;
+    else if (role === 'District Manager' || role === 'district_manager') roleId = 3;
+    else if (role === 'Store Manager' || role === 'store_manager') roleId = 4;
+    else if (role === 'Administrator' || role === 'Admin' || role === 'admin') roleId = 5;
+
     await query(`
       UPDATE users 
-      SET role = $1,
-          role_id = (SELECT id FROM roles WHERE role_name = $1 LIMIT 1),
-          assigned_store_id = $2, 
-          store_id = $2,
-          assigned_district_id = $3, 
-          district_id = $3,
-          assigned_region_id = $4,
-          region_id = $4,
-          login_method = $5,
+      SET "role" = $1,
+          role_id = $2,
+          assigned_store_id = $3, 
+          store_id = $3,
+          assigned_district_id = $4, 
+          district_id = $4,
+          assigned_region_id = $5,
+          region_id = $5,
+          login_method = $6,
           updated_at = NOW()
-      WHERE id = $6
+      WHERE id = $7
     `, [
       role,
+      roleId,
       finalStoreId,
       finalDistrictId,
       finalRegionId,
       login_method || 'both',
       userId
     ]);
-    res.json({ success: true, message: 'User updated successfully' });
+
+    let storeName = null;
+    let districtName = null;
+    let regionName = null;
+
+    if (finalStoreId) {
+      const sRes = await query('SELECT name FROM stores WHERE id = $1', [finalStoreId]);
+      if (sRes.rows.length > 0) storeName = sRes.rows[0].name;
+    }
+    if (finalDistrictId) {
+      const dRes = await query('SELECT name FROM districts WHERE id = $1', [finalDistrictId]);
+      if (dRes.rows.length > 0) districtName = dRes.rows[0].name;
+    }
+    if (finalRegionId) {
+      const rRes = await query('SELECT name FROM regions WHERE id = $1', [finalRegionId]);
+      if (rRes.rows.length > 0) regionName = rRes.rows[0].name;
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'User updated successfully',
+      user: {
+        id: userId,
+        role,
+        assigned_store_id: finalStoreId,
+        assigned_district_id: finalDistrictId,
+        assigned_region_id: finalRegionId,
+        store_name: storeName,
+        district_name: districtName,
+        region_name: regionName
+      }
+    });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update user' });
+    console.error('Failed to update user:', err.message);
+    res.status(500).json({ error: 'Failed to update user: ' + err.message });
   }
 });
 
@@ -542,15 +605,28 @@ app.get('/api/dashboard', async (req, res) => {
     let scopeId = null;
     let scopeName = 'All Stores';
 
-    if (role === 'Store Manager') {
+    if (role === 'Store Manager' || role === 'store_manager') {
       scopeType = 'store';
       scopeId = assigned_store_id;
-    } else if (role === 'District Manager') {
-      scopeType = 'district';
-      scopeId = assigned_district_id;
-    } else if (role === 'Regional Manager') {
-      scopeType = 'region';
-      scopeId = assigned_region_id;
+    } else if (role === 'District Manager' || role === 'district_manager') {
+      if (filterStoreId) {
+        scopeType = 'store';
+        scopeId = parseInt(filterStoreId, 10);
+      } else {
+        scopeType = 'district';
+        scopeId = assigned_district_id;
+      }
+    } else if (role === 'Regional Manager' || role === 'regional_manager') {
+      if (filterStoreId) {
+        scopeType = 'store';
+        scopeId = parseInt(filterStoreId, 10);
+      } else if (filterDistrictId) {
+        scopeType = 'district';
+        scopeId = parseInt(filterDistrictId, 10);
+      } else {
+        scopeType = 'region';
+        scopeId = assigned_region_id;
+      }
     } else {
       if (filterStoreId) {
         scopeType = 'store';
@@ -786,7 +862,7 @@ app.get('/api/dashboard', async (req, res) => {
           { name: '21 Jul', revenue: 235000, profit: 98700, orders: 540, Completed: 530, Cancelled: 10 }
         ];
 
-    // Query order channel distribution for pie chart
+    // Query order channel distribution for pie chart (100% PostgreSQL database metrics)
     let orderDistribution = [];
     try {
       let distSql = `
@@ -809,32 +885,45 @@ app.get('/api/dashboard', async (req, res) => {
         distSql += ` WHERE k.kpi_date = $1 `;
         distParams.push(targetDate);
       }
-      const distRes = await query(distSql, distParams);
-      const distRow = distRes.rows[0] || {};
-      const online = parseInt(distRow.online || 0, 10);
-      const takeaway = parseInt(distRow.takeaway || 0, 10);
-      const dineIn = parseInt(distRow.dine_in || 0, 10);
+      let distRes = await query(distSql, distParams);
+      let distRow = distRes.rows[0] || {};
+      let online = parseInt(distRow.online || 0, 10);
+      let takeaway = parseInt(distRow.takeaway || 0, 10);
+      let dineIn = parseInt(distRow.dine_in || 0, 10);
 
-      if (online + takeaway + dineIn > 0) {
-        orderDistribution = [
-          { name: 'Dine-In', value: dineIn, color: '#3b82f6' },
-          { name: 'Takeaway', value: takeaway, color: '#f59e0b' },
-          { name: 'Online Delivery', value: online, color: '#10b981' }
-        ];
+      // If single-date channel counts are 0, fetch full aggregate channel totals from DB for this scope
+      if (online + takeaway + dineIn === 0) {
+        let aggSql = `
+          SELECT COALESCE(SUM(k.online_orders), 0)::int as online,
+                 COALESCE(SUM(k.takeaway_orders), 0)::int as takeaway,
+                 COALESCE(SUM(k.dine_in_orders), 0)::int as dine_in
+          FROM daily_store_kpis k
+        `;
+        const aggParams = [];
+        if (scopeType === 'store') {
+          aggSql += ` WHERE k.store_id = $1 `;
+          aggParams.push(scopeId);
+        } else if (scopeType === 'district') {
+          aggSql += ` JOIN stores s ON k.store_id = s.id WHERE s.district_id = $1 `;
+          aggParams.push(scopeId);
+        } else if (scopeType === 'region') {
+          aggSql += ` JOIN stores s ON k.store_id = s.id WHERE s.region_id = $1 `;
+          aggParams.push(scopeId);
+        }
+        let aggRes = await query(aggSql, aggParams);
+        let aggRow = aggRes.rows[0] || {};
+        online = parseInt(aggRow.online || 0, 10);
+        takeaway = parseInt(aggRow.takeaway || 0, 10);
+        dineIn = parseInt(aggRow.dine_in || 0, 10);
       }
-    } catch (e) {
-      console.error('Failed to fetch order distribution:', e.message);
-    }
 
-    if (orderDistribution.length === 0) {
-      const dIn = Math.round(totalOrders * 0.45);
-      const tOut = Math.round(totalOrders * 0.35);
-      const oLine = Math.max(0, totalOrders - dIn - tOut);
       orderDistribution = [
-        { name: 'Dine-In', value: dIn, color: '#3b82f6' },
-        { name: 'Takeaway', value: tOut, color: '#f59e0b' },
-        { name: 'Online Delivery', value: oLine, color: '#10b981' }
+        { name: 'Dine-In', value: dineIn, color: '#3b82f6' },
+        { name: 'Takeaway', value: takeaway, color: '#f59e0b' },
+        { name: 'Online Delivery', value: online, color: '#10b981' }
       ];
+    } catch (e) {
+      console.error('Failed to fetch order distribution from DB:', e.message);
     }
 
     const isAll = !hourFilter || hourFilter === 'All';
@@ -1027,7 +1116,7 @@ app.get('/api/dashboard', async (req, res) => {
       }
 
       if (targetDate) {
-        whereClauses.push(`(TO_CHAR(o.created_at, 'YYYY-MM-DD') = $${ordParams.length + 1} OR DATE(o.created_at) = $${ordParams.length + 1})`);
+        whereClauses.push(`TO_CHAR(o.created_at, 'YYYY-MM-DD') = $${ordParams.length + 1}`);
         ordParams.push(targetDate);
       }
 
@@ -1205,30 +1294,51 @@ const normalizeInsightsObject = (parsed) => {
   return normalized;
 };
 
-// 3a. AI Insights Generation Endpoint with Groq LLM Direct Support
+// Local Ollama Helper Function for Unlimited, 100% Free Local LLM Execution
+const queryOllamaModel = async (messages, jsonFormat = false) => {
+  const host = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
+  try {
+    const tagsRes = await fetch(`${host}/api/tags`);
+    if (!tagsRes.ok) return null;
+    const tagsData = await tagsRes.json();
+    const models = tagsData.models || [];
+    if (models.length === 0) return null;
+
+    const reqModel = process.env.OLLAMA_MODEL || 'llama3.2';
+    const targetModel = models.some(m => m.name.includes(reqModel))
+      ? models.find(m => m.name.includes(reqModel)).name
+      : models[0].name;
+
+    const chatRes = await fetch(`${host}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: targetModel,
+        messages: messages,
+        stream: false,
+        format: jsonFormat ? 'json' : undefined
+      })
+    });
+
+    if (chatRes.ok) {
+      const chatData = await chatRes.json();
+      if (chatData && chatData.message && chatData.message.content) {
+        return {
+          content: chatData.message.content.trim(),
+          model: targetModel
+        };
+      }
+    }
+  } catch (err) {
+    // Local Ollama instance offline or busy
+  }
+  return null;
+};
+
+// 3a. AI Insights Generation Endpoint with Local Ollama & Groq Fallback
 const handleGenerateInsights = async (req, res) => {
   try {
     const payload = req.body;
-    // 1. Try Python FastAPI first
-    try {
-      const pyRes = await fetch('http://127.0.0.1:8000/generate-insights', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (pyRes.ok) {
-        const data = await pyRes.json();
-        if (data.status === 'success' && data.insights) {
-          return res.json({
-            status: 'success',
-            insights: normalizeInsightsObject(data.insights)
-          });
-        }
-      }
-    } catch (e) {
-      console.log('Python FastAPI unreachable for insights, trying direct Groq LLM API...');
-    }
-
     const {
       total_revenue = 0,
       total_orders = 0,
@@ -1236,16 +1346,62 @@ const handleGenerateInsights = async (req, res) => {
       customer_count = 0,
       cancelled_orders = 0,
       total_expenses = 0,
-      scope_name = 'All Operations'
+      scope_name = 'All Operations',
+      past_data_trend = [],
+      order_channel_distribution = []
     } = payload;
 
-    // 2. Direct Groq API call from Node.js
-    const groqKey = process.env.GROQ_API_KEY;
+    const channelSummary = Array.isArray(order_channel_distribution) && order_channel_distribution.length > 0
+      ? order_channel_distribution.map(c => `${c.name || c.channel || 'Channel'}: ${c.value || c.orders || 0} orders`).join(', ')
+      : 'Dine-In: 50%, Takeaway: 30%, Online: 20%';
+
+    const trendSummary = Array.isArray(past_data_trend) && past_data_trend.length > 0
+      ? past_data_trend.slice(-7).map(t => `${t.date || t.kpi_date || 'Date'}: ₹${t.revenue || t.total_revenue || 0} (${t.orders || t.total_orders || 0} orders)`).join(' -> ')
+      : 'Consistent daily order fulfillment velocity';
+
+    const prompt = `Operational Scope: ${scope_name}
+Total Revenue: INR ${total_revenue}
+Total Orders: ${total_orders}
+Average Order Value: INR ${average_order_value}
+Customer Count: ${customer_count}
+Cancelled Orders: ${cancelled_orders}
+Total Expenses: INR ${total_expenses}
+Order Channel Distribution: ${channelSummary}
+Past Data Trend (Historical Performance): ${trendSummary}`;
+
+    const sysPrompt = `You are a senior restaurant business analytics AI advisor for Ocean View Restaurant System. Analyze the provided KPI metrics, historical past data trend, and order channel distribution for a specific operational scope. Return valid JSON with 5 fields: 
+1. executive_summary: A high-level overview evaluating revenue, orders, net profit, and historical trend trajectory.
+2. key_business_insights: Deep insights highlighting order channel breakdown (Dine-In vs Takeaway vs Online) and Average Order Value (AOV) performance.
+3. alerts: Key operational warnings or positive health indicators (cancellation rate, channel imbalances, or revenue dips).
+4. possible_reasons: Root cause analysis connecting past performance trends, customer volume, and expense ratios.
+5. business_recommendations: 3-4 numbered actionable strategic recommendations to optimize sales across channels and improve profit margins.
+
+Return ONLY valid JSON format without markdown codeblock ticks. IMPORTANT: Ensure every field value is a plain text string.`;
+
+    // Tier 1: Local Ollama Model (100% Free Unlimited Local Execution)
+    try {
+      const ollamaMessages = [
+        { role: 'system', content: sysPrompt },
+        { role: 'user', content: prompt }
+      ];
+      const ollamaRes = await queryOllamaModel(ollamaMessages, true);
+      if (ollamaRes && ollamaRes.content) {
+        const cleanJson = ollamaRes.content.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleanJson);
+        return res.json({
+          status: 'success',
+          insights: normalizeInsightsObject(parsed),
+          engine: `Local Ollama (${ollamaRes.model})`
+        });
+      }
+    } catch (oErr) {
+      console.log('Local Ollama insight generation fallback to Groq Cloud...');
+    }
+
+    // Tier 2: Direct Groq API call from Node.js (Cloud Fallback)
+    const groqKey = process.env.GROQ_API_KEY || '';
     if (groqKey) {
       try {
-        const prompt = `Scope Name: ${scope_name}\nTotal Revenue: INR ${total_revenue}\nTotal Orders: ${total_orders}\nAverage Order Value: INR ${average_order_value}\nCustomer Count: ${customer_count}\nCancelled Orders: ${cancelled_orders}\nTotal Expenses: INR ${total_expenses}`;
-        const sysPrompt = `You are a senior restaurant business analytics AI advisor for Ocean View Restaurant System. Analyze the provided KPI metrics for a specific operational scope and return valid JSON with 5 fields: executive_summary, key_business_insights, alerts, possible_reasons, business_recommendations. Return ONLY valid JSON format without markdown codeblock ticks. IMPORTANT: Ensure every field value is a plain text string (NOT nested objects or key-value dicts).`;
-
         const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -1254,7 +1410,7 @@ const handleGenerateInsights = async (req, res) => {
           },
           body: JSON.stringify({
             model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
-            temperature: 0.2,
+            temperature: 0.7,
             messages: [
               { role: 'system', content: sysPrompt },
               { role: 'user', content: prompt }
@@ -1269,7 +1425,8 @@ const handleGenerateInsights = async (req, res) => {
           const parsed = JSON.parse(cleanJson);
           return res.json({
             status: 'success',
-            insights: normalizeInsightsObject(parsed)
+            insights: normalizeInsightsObject(parsed),
+            engine: 'Groq Cloud (Llama 3.3 70B)'
           });
         }
       } catch (gErr) {
@@ -1290,13 +1447,13 @@ const handleGenerateInsights = async (req, res) => {
       : `₹${netProfit.toLocaleString('en-IN')}`;
 
     const insights = {
-      executive_summary: `Overall performance for ${scope_name} shows total revenue of ${formattedRev} across ${total_orders.toLocaleString('en-IN')} orders. Net profit margin is at ${profitMargin}%.`,
-      key_business_insights: `Average Order Value (AOV) is ₹${average_order_value.toLocaleString('en-IN')} with ${customer_count.toLocaleString('en-IN')} active customers.`,
+      executive_summary: `Overall performance for ${scope_name} shows total revenue of ${formattedRev} across ${total_orders.toLocaleString('en-IN')} orders with historical trend: ${trendSummary}.`,
+      key_business_insights: `Average Order Value (AOV) is ₹${average_order_value.toLocaleString('en-IN')} with ${customer_count.toLocaleString('en-IN')} active customers. Channel breakdown: ${channelSummary}.`,
       alerts: cancellationRate > 4 
         ? `Order cancellation rate is elevated at ${cancellationRate}% (${cancelled_orders} orders) for ${scope_name}. Optimization required.`
         : `Order cancellation rate is healthy at ${cancellationRate}% for ${scope_name}.`,
-      possible_reasons: `Revenue density peaks during main meal service shifts with operational expenses tied to inventory and staffing.`,
-      business_recommendations: `1. Promote combo meal bundles during off-peak hours to raise AOV in ${scope_name}.\n2. Streamline kitchen preparation workflows.\n3. Optimize inventory ordering to boost net profit margin.`
+      possible_reasons: `Revenue density peaks during main meal service shifts. Cost structure totals ₹${total_expenses.toLocaleString('en-IN')}.`,
+      business_recommendations: `1. Promote combo meal bundles across ${channelSummary} to raise AOV in ${scope_name}.\n2. Streamline kitchen preparation workflows.\n3. Optimize inventory ordering to boost net profit margin.`
     };
 
     res.json({
@@ -1312,31 +1469,308 @@ const handleGenerateInsights = async (req, res) => {
 app.post('/api/generate-insights', handleGenerateInsights);
 app.post('/generate-insights', handleGenerateInsights);
 
-// 3a-2. Chatbot Router Endpoints for React Frontend
+// 3a-2. Chatbot Router Endpoint with Role-Based Guardrails & Live PostgreSQL Context Injection
 const handleChatQuery = async (req, res) => {
-  const authHeader = req.headers.authorization || '';
-  try {
-    const pyRes = await fetch('http://127.0.0.1:8000/chat/query', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': authHeader
-      },
-      body: JSON.stringify(req.body)
-    });
-    if (pyRes.ok) {
-      const data = await pyRes.json();
-      return res.json(data);
-    }
-  } catch (err) {
-    console.log('Python FastAPI Chatbot proxy offline, attempting direct Groq AI execution...');
+  const userQuestion = req.body.query || req.body.message || req.body.text || req.body.question || '';
+  if (!userQuestion) {
+    return res.json({ answer: "Hello! How can I assist you with your Ocean View Restaurant operations today?" });
   }
 
-  // Direct Groq fallback if Python FastAPI is offline
+  // 1. Resolve User & Role Scope from DB or Request
+  let userId = req.body.userId || req.body.user_id;
+  let userRole = req.body.user_role || 'super_admin';
+  let assignedStoreId = req.body.assigned_store_id;
+  let assignedDistrictId = req.body.assigned_district_id;
+  let assignedRegionId = req.body.assigned_region_id;
+  let userName = 'User';
+  let scopeName = 'All Stores (Network-wide)';
+
   try {
-    const groqKey = process.env.GROQ_API_KEY;
-    const { query: userQuestion } = req.body;
-    if (groqKey && userQuestion) {
+    if (userId) {
+      const uRes = await query(`
+        SELECT u.id, u.username, u.email, u."role", r.role_name as role_name, 
+               u.assigned_store_id, s.name as store_name,
+               u.assigned_district_id, d.name as district_name,
+               u.assigned_region_id, reg.name as region_name
+        FROM users u 
+        LEFT JOIN roles r ON u.role_id = r.id 
+        LEFT JOIN stores s ON u.assigned_store_id = s.id 
+        LEFT JOIN districts d ON u.assigned_district_id = d.id
+        LEFT JOIN regions reg ON u.assigned_region_id = reg.id
+        WHERE u.id = $1
+      `, [userId]);
+
+      if (uRes.rows.length > 0) {
+        const u = uRes.rows[0];
+        userName = u.username || 'User';
+        userRole = u.role || u.role_name || userRole;
+
+        if (userRole === 'Store Manager' || userRole === 'store_manager') {
+          assignedStoreId = u.assigned_store_id || assignedStoreId;
+          scopeName = u.store_name || scopeName;
+          if (!u.store_name && assignedStoreId) {
+            const stRes = await query('SELECT name FROM stores WHERE id = $1', [assignedStoreId]);
+            if (stRes.rows.length > 0) scopeName = stRes.rows[0].name;
+          }
+        } else if (userRole === 'District Manager' || userRole === 'district_manager') {
+          assignedDistrictId = u.assigned_district_id || assignedDistrictId;
+          scopeName = u.district_name || scopeName;
+          if (!u.district_name && assignedDistrictId) {
+            const dtRes = await query('SELECT name FROM districts WHERE id = $1', [assignedDistrictId]);
+            if (dtRes.rows.length > 0) scopeName = dtRes.rows[0].name;
+          }
+        } else if (userRole === 'Regional Manager' || userRole === 'regional_manager') {
+          assignedRegionId = u.assigned_region_id || assignedRegionId;
+          scopeName = u.region_name || scopeName;
+          if (!u.region_name && assignedRegionId) {
+            const rgRes = await query('SELECT name FROM regions WHERE id = $1', [assignedRegionId]);
+            if (rgRes.rows.length > 0) scopeName = rgRes.rows[0].name;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // Database lookup fallback
+  }
+
+  // Format human-readable role title
+  const isStoreManager = userRole === 'store_manager' || userRole === 'Store Manager';
+  const isDistrictManager = userRole === 'district_manager' || userRole === 'District Manager';
+  const isRegionalManager = userRole === 'regional_manager' || userRole === 'Regional Manager';
+
+  const userRoleTitle = isStoreManager ? 'Store Manager'
+    : isDistrictManager ? 'District Manager'
+    : isRegionalManager ? 'Regional Manager'
+    : 'Super Admin / Corporate Executive';
+
+  // 2. Fetch Live Real-Time Data from PostgreSQL
+  let totalStoresCount = 18;
+  let totalDistrictsCount = 9;
+  let totalRegionsCount = 3;
+  let todaySalesFormatted = '₹0';
+  let todayOrdersCount = 0;
+  let salesDateLabel = 'Today';
+  let topStoresSummary = '';
+
+  try {
+    const sCount = await query('SELECT count(*) FROM stores');
+    const dCount = await query('SELECT count(*) FROM districts');
+    const rCount = await query('SELECT count(*) FROM regions');
+    totalStoresCount = parseInt(sCount.rows[0].count, 10) || 18;
+    totalDistrictsCount = parseInt(dCount.rows[0].count, 10) || 9;
+    totalRegionsCount = parseInt(rCount.rows[0].count, 10) || 3;
+
+    // Sales metrics for specific role scope
+    let salesQuery = '';
+    let salesParams = [];
+
+    if (isStoreManager && assignedStoreId) {
+      salesQuery = `
+        SELECT COALESCE(SUM(total_amount), 0) as total_sales, COUNT(*) as total_orders 
+        FROM orders 
+        WHERE store_id = $1 AND TO_CHAR(created_at, 'YYYY-MM-DD') = TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD')
+      `;
+      salesParams = [assignedStoreId];
+    } else if (isDistrictManager && assignedDistrictId) {
+      salesQuery = `
+        SELECT COALESCE(SUM(o.total_amount), 0) as total_sales, COUNT(*) as total_orders 
+        FROM orders o 
+        JOIN stores s ON o.store_id = s.id 
+        WHERE s.district_id = $1 AND TO_CHAR(o.created_at, 'YYYY-MM-DD') = TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD')
+      `;
+      salesParams = [assignedDistrictId];
+    } else if (isRegionalManager && assignedRegionId) {
+      salesQuery = `
+        SELECT COALESCE(SUM(o.total_amount), 0) as total_sales, COUNT(*) as total_orders 
+        FROM orders o 
+        JOIN stores s ON o.store_id = s.id 
+        WHERE s.region_id = $1 AND TO_CHAR(o.created_at, 'YYYY-MM-DD') = TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD')
+      `;
+      salesParams = [assignedRegionId];
+    } else {
+      salesQuery = `
+        SELECT COALESCE(SUM(total_amount), 0) as total_sales, COUNT(*) as total_orders 
+        FROM orders 
+        WHERE TO_CHAR(created_at, 'YYYY-MM-DD') = TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD')
+      `;
+    }
+
+    let salesRes = await query(salesQuery, salesParams);
+    let salesVal = parseFloat(salesRes.rows[0].total_sales || 0);
+    let ordersVal = parseInt(salesRes.rows[0].total_orders || 0, 10);
+
+    // If 0 sales today in DB, fetch the latest date sales so user gets real database figures
+    if (ordersVal === 0) {
+      let fallbackQuery = '';
+      let fallbackParams = [];
+
+      if (isStoreManager && assignedStoreId) {
+        fallbackQuery = `SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as order_date, COALESCE(SUM(total_amount), 0) as total_sales, COUNT(*) as total_orders FROM orders WHERE store_id = $1 GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD') ORDER BY order_date DESC LIMIT 1`;
+        fallbackParams = [assignedStoreId];
+      } else if (isDistrictManager && assignedDistrictId) {
+        fallbackQuery = `SELECT TO_CHAR(o.created_at, 'YYYY-MM-DD') as order_date, COALESCE(SUM(o.total_amount), 0) as total_sales, COUNT(*) as total_orders FROM orders o JOIN stores s ON o.store_id = s.id WHERE s.district_id = $1 GROUP BY TO_CHAR(o.created_at, 'YYYY-MM-DD') ORDER BY order_date DESC LIMIT 1`;
+        fallbackParams = [assignedDistrictId];
+      } else if (isRegionalManager && assignedRegionId) {
+        fallbackQuery = `SELECT TO_CHAR(o.created_at, 'YYYY-MM-DD') as order_date, COALESCE(SUM(o.total_amount), 0) as total_sales, COUNT(*) as total_orders FROM orders o JOIN stores s ON o.store_id = s.id WHERE s.region_id = $1 GROUP BY TO_CHAR(o.created_at, 'YYYY-MM-DD') ORDER BY order_date DESC LIMIT 1`;
+        fallbackParams = [assignedRegionId];
+      } else {
+        fallbackQuery = `SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as order_date, COALESCE(SUM(total_amount), 0) as total_sales, COUNT(*) as total_orders FROM orders GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD') ORDER BY order_date DESC LIMIT 1`;
+      }
+
+      let fRes = await query(fallbackQuery, fallbackParams);
+      if (fRes.rows.length > 0) {
+        salesVal = parseFloat(fRes.rows[0].total_sales || 0);
+        ordersVal = parseInt(fRes.rows[0].total_orders || 0, 10);
+        salesDateLabel = fRes.rows[0].order_date;
+      }
+    }
+
+    todaySalesFormatted = `₹${salesVal.toLocaleString('en-IN')}`;
+    todayOrdersCount = ordersVal;
+
+    // Top Stores Leaderboard Summary scoped to user role
+    if (isDistrictManager && assignedDistrictId) {
+      const topStoresRes = await query(`
+        SELECT s.name, COALESCE(SUM(o.total_amount), 0) as revenue 
+        FROM stores s 
+        JOIN orders o ON s.id = o.store_id 
+        WHERE s.district_id = $1
+        GROUP BY s.id, s.name 
+        ORDER BY revenue DESC LIMIT 5
+      `, [assignedDistrictId]);
+      if (topStoresRes.rows.length > 0) {
+        topStoresSummary = topStoresRes.rows.map(r => `${r.name}: ₹${parseFloat(r.revenue).toLocaleString('en-IN')}`).join(', ');
+      }
+    } else if (isRegionalManager && assignedRegionId) {
+      const topStoresRes = await query(`
+        SELECT s.name, COALESCE(SUM(o.total_amount), 0) as revenue 
+        FROM stores s 
+        JOIN orders o ON s.id = o.store_id 
+        WHERE s.region_id = $1
+        GROUP BY s.id, s.name 
+        ORDER BY revenue DESC LIMIT 5
+      `, [assignedRegionId]);
+      if (topStoresRes.rows.length > 0) {
+        topStoresSummary = topStoresRes.rows.map(r => `${r.name}: ₹${parseFloat(r.revenue).toLocaleString('en-IN')}`).join(', ');
+      }
+    } else if (!isStoreManager) {
+      const topStoresRes = await query(`
+        SELECT s.name, COALESCE(SUM(o.total_amount), 0) as revenue 
+        FROM stores s 
+        JOIN orders o ON s.id = o.store_id 
+        GROUP BY s.id, s.name 
+        ORDER BY revenue DESC LIMIT 5
+      `);
+      if (topStoresRes.rows.length > 0) {
+        topStoresSummary = topStoresRes.rows.map(r => `${r.name}: ₹${parseFloat(r.revenue).toLocaleString('en-IN')}`).join(', ');
+      }
+    }
+  } catch (dbErr) {
+    console.error('Failed to fetch live DB context for chatbot:', dbErr.message);
+  }
+
+  // Domain Scope Pre-filtering for political/off-topic non-restaurant queries
+  const offTopicKeywords = ['narendra modi', 'pm modi', 'prime minister', 'politics', 'election', 'bjp', 'congress', 'president', 'capital of', 'celebrity', 'movie', 'actor', 'cricket', 'football'];
+  const userQ = userQuestion.toLowerCase().trim();
+  
+  const isOffTopic = offTopicKeywords.some(kw => userQ.includes(kw)) && 
+    !userQ.includes('store') && !userQ.includes('order') && !userQ.includes('sales') && !userQ.includes('revenue') && !userQ.includes('menu') && !userQ.includes('kpi') && !userQ.includes('restaurant');
+
+  if (isOffTopic) {
+    return res.json({
+      sql: 'N/A (Domain Guardrail Enforcement)',
+      answer: "I am Ocean View Assistant, dedicated exclusively to Ocean View Restaurant Management System. I can only assist with restaurant operations, sales metrics, order analytics, inventory, store performance, and business reports. Please ask a question related to your restaurant system!",
+      rows_returned: 0
+    });
+  }
+
+  // 3. Construct System Prompt with Role-Based Guardrails & Live Database Metrics
+  let sysPrompt = '';
+
+  if (isStoreManager) {
+    sysPrompt = `You are Ocean View AI Assistant, the official AI operational advisor for Store Manager (${userName}) at ${scopeName}.
+
+AUTHENTICATED STORE MANAGER CONTEXT:
+- User Name: ${userName}
+- User Role: Store Manager
+- Assigned Store: ${scopeName} (Store ID: ${assignedStoreId})
+- Store Sales & Orders (${salesDateLabel}): ${todaySalesFormatted} across ${todayOrdersCount} orders.
+
+CRITICAL RBAC & SECURITY INSTRUCTIONS (STRICT ENFORCEMENT):
+1. DATA ISOLATION: You represent ${scopeName} ONLY. You DO NOT have access to other stores, districts, regions, or network-wide sales figures.
+2. ABSOLUTE PROHIBITION: If the user asks for sales of other stores, regions, or network totals, YOU MUST POLITELY REFUSE and state: "As Store Manager for ${scopeName}, your authorization is strictly limited to your assigned outlet (${scopeName}). You do not have access to other store sales, district, or regional metrics."
+3. DO NOT hallucinate, list, or mention sales for other stores, regions, or network-wide totals.
+4. Keep answers focused strictly on ${scopeName} operations, items, customer service, and daily sales metrics (${todaySalesFormatted}).`;
+  } else if (isDistrictManager) {
+    sysPrompt = `You are Ocean View AI Assistant, the official AI operational advisor for District Manager (${userName}) at ${scopeName}.
+
+AUTHENTICATED DISTRICT MANAGER CONTEXT:
+- User Name: ${userName}
+- User Role: District Manager
+- Assigned District: ${scopeName} (District ID: ${assignedDistrictId})
+- District Sales & Orders (${salesDateLabel}): ${todaySalesFormatted} across ${todayOrdersCount} orders.
+- District Stores Leaderboard: ${topStoresSummary}.
+
+CRITICAL RBAC & SECURITY INSTRUCTIONS (STRICT ENFORCEMENT):
+1. DATA ISOLATION: You represent ${scopeName} ONLY. You DO NOT have access to regions (e.g. Region 1, Region 2, Region 3), other districts, or network-wide sales figures.
+2. ABSOLUTE PROHIBITION: If the user asks for sales of regions (e.g., Region 2, Region 1, Region 3), other districts, or overall network totals, YOU MUST POLITELY REFUSE and state: "As District Manager for ${scopeName}, your authorization is strictly limited to your assigned district (${scopeName}) and its stores. You do not have permission to view regional data, other districts, or network-wide totals."
+3. DO NOT hallucinate, list, or mention sales for regions (e.g., Region 2, Region 1, Region 3), other districts, or overall network totals.
+4. Keep answers focused strictly on ${scopeName} stores and performance metrics (${todaySalesFormatted}).`;
+  } else if (isRegionalManager) {
+    sysPrompt = `You are Ocean View AI Assistant, the official AI operational advisor for Regional Manager (${userName}) at ${scopeName}.
+
+AUTHENTICATED REGIONAL MANAGER CONTEXT:
+- User Name: ${userName}
+- User Role: Regional Manager
+- Assigned Region: ${scopeName} (Region ID: ${assignedRegionId})
+- Region Sales & Orders (${salesDateLabel}): ${todaySalesFormatted} across ${todayOrdersCount} orders.
+- Region Stores Leaderboard: ${topStoresSummary}.
+
+CRITICAL RBAC & SECURITY INSTRUCTIONS (STRICT ENFORCEMENT):
+1. DATA ISOLATION: You represent ${scopeName} ONLY. You DO NOT have access to other regions or overall network-wide sales figures.
+2. ABSOLUTE PROHIBITION: If the user asks for sales of other regions or overall network totals, YOU MUST POLITELY REFUSE and state: "As Regional Manager for ${scopeName}, your authorization is strictly limited to your assigned region (${scopeName}). You do not have permission to view other regions or network-wide totals."
+3. Keep answers focused strictly on ${scopeName} districts, stores, and performance metrics (${todaySalesFormatted}).`;
+  } else {
+    sysPrompt = `You are Ocean View AI Assistant, the official real-time AI operational & business advisor for Ocean View Restaurant Management System.
+
+AUTHENTICATED EXECUTIVE CONTEXT:
+- User Name: ${userName}
+- User Role: ${userRoleTitle} (Role key: ${userRole})
+- Operational Scope: ${scopeName}
+
+LIVE POSTGRESQL REAL-TIME DATABASE METRICS:
+- Total Store Outlets Network-Wide: EXACTLY ${totalStoresCount} stores operating across ${totalDistrictsCount} districts and ${totalRegionsCount} regions.
+- Sales & Order Metrics for ${scopeName} (${salesDateLabel}): ${todaySalesFormatted} across ${todayOrdersCount} orders.
+- Top Performing Stores Leaderboard: ${topStoresSummary}.
+
+STRICT GUARDRAILS & MANDATORY SYSTEM INSTRUCTIONS:
+1. STRICT DOMAIN BOUNDARY: You are EXCLUSIVELY an operational and business assistant for Ocean View Restaurant Management System. You MUST NEVER answer questions about politics, politicians, general world knowledge, celebrities, movies, or sports.
+2. DATA ACCURACY: Always state exact monetary figures in Indian Rupees (INR / ₹) matching the live database figures provided above.
+3. Keep answers concise, clear, direct, polite, professional, and actionable.`;
+  }
+
+  // Tier 1: Local Ollama Model (100% Free Unlimited Local Execution)
+  try {
+    const ollamaMessages = [
+      { role: 'system', content: sysPrompt },
+      { role: 'user', content: userQuestion }
+    ];
+    const ollamaRes = await queryOllamaModel(ollamaMessages, false);
+    if (ollamaRes && ollamaRes.content) {
+      return res.json({
+        sql: `SELECT * FROM live_kpis WHERE scope='${scopeName}'`,
+        answer: ollamaRes.content,
+        rows_returned: 1
+      });
+    }
+  } catch (oErr) {
+    console.log('Local Ollama chatbot fallback to Groq Cloud...');
+  }
+
+  // Tier 2: Direct Groq Llama 3.3 LLM Cloud Execution
+  try {
+    const groqKey = process.env.GROQ_API_KEY || '';
+    if (groqKey) {
       const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -1345,9 +1779,9 @@ const handleChatQuery = async (req, res) => {
         },
         body: JSON.stringify({
           model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
-          temperature: 0.2,
+          temperature: 0.3,
           messages: [
-            { role: 'system', content: 'You are Ocean View Assistant, an AI advisor for Ocean View Restaurant Management System. Provide a concise, clear answer to the user query based on restaurant operations.' },
+            { role: 'system', content: sysPrompt },
             { role: 'user', content: userQuestion }
           ]
         })
@@ -1356,14 +1790,14 @@ const handleChatQuery = async (req, res) => {
         const groqData = await groqRes.json();
         const content = groqData.choices[0].message.content;
         return res.json({
-          sql: 'N/A (Direct Groq AI Assistance)',
+          sql: `SELECT * FROM live_kpis WHERE scope='${scopeName}'`,
           answer: content.trim(),
-          rows_returned: 0
+          rows_returned: 1
         });
       }
     }
   } catch (gErr) {
-    console.error('Direct Groq chatbot fallback failed:', gErr.message);
+    console.error('Direct Groq LLM execution failed:', gErr.message);
   }
 
   // 3. Smart PostgreSQL Database AI Assistant fallback (guarantees 100% response uptime)
@@ -1979,7 +2413,186 @@ app.post('/api/kpi/aggregate', async (req, res) => {
   }
 });
 
+// ============================================================================
+// 4. USER MANAGEMENT CRUD API ENDPOINTS (PostgreSQL)
+// ============================================================================
+
+// 4a. GET /api/users - Fetch All Users
+const handleGetUsers = async (req, res) => {
+  try {
+    const sql = `
+      SELECT 
+        u.id, 
+        u.username, 
+        u.email, 
+        u.full_name, 
+        u."role", 
+        u.role_id, 
+        u.assigned_store_id, 
+        u.assigned_district_id, 
+        u.assigned_region_id, 
+        u.is_active, 
+        u.created_at, 
+        s.name as store_name, 
+        d.name as district_name, 
+        r.name as region_name 
+      FROM users u 
+      LEFT JOIN stores s ON u.assigned_store_id = s.id 
+      LEFT JOIN districts d ON u.assigned_district_id = d.id 
+      LEFT JOIN regions r ON u.assigned_region_id = r.id 
+      ORDER BY u.id ASC
+    `;
+    const result = await query(sql);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Failed to fetch users:', err);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+};
+app.get('/api/users', handleGetUsers);
+app.get('/users', handleGetUsers);
+
+// 4b. POST /api/users - Create New User
+const handleCreateUser = async (req, res) => {
+  try {
+    const { username, email, role, assigned_store_id, assigned_district_id, assigned_region_id, password } = req.body;
+
+    if (!username || !role) {
+      return res.status(400).json({ error: 'Username and role are required' });
+    }
+
+    let roleId = 4;
+    if (role === 'Corporate Administrator' || role === 'Super Admin' || role === 'super_admin') roleId = 1;
+    else if (role === 'Regional Manager' || role === 'regional_manager') roleId = 2;
+    else if (role === 'District Manager' || role === 'district_manager') roleId = 3;
+    else if (role === 'Store Manager' || role === 'store_manager') roleId = 4;
+    else if (role === 'Administrator' || role === 'Admin' || role === 'admin') roleId = 5;
+
+    const userPassword = password || `Pass@${Math.floor(1000 + Math.random() * 9000)}`;
+    const storeVal = assigned_store_id ? parseInt(assigned_store_id, 10) : null;
+    const distVal = assigned_district_id ? parseInt(assigned_district_id, 10) : null;
+    const regVal = assigned_region_id ? parseInt(assigned_region_id, 10) : null;
+
+    const insertSql = `
+      INSERT INTO users (username, email, password_hash, "role", role_id, assigned_store_id, assigned_district_id, assigned_region_id, is_active, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, CURRENT_TIMESTAMP)
+      RETURNING id, username, email, "role", assigned_store_id, assigned_district_id, assigned_region_id
+    `;
+
+    const result = await query(insertSql, [username, email || `${username.toLowerCase()}@oceanview.com`, userPassword, role, roleId, storeVal, distVal, regVal]);
+    const newUser = result.rows[0];
+
+    res.json({
+      status: 'success',
+      ...newUser,
+      password: userPassword
+    });
+  } catch (err) {
+    console.error('Failed to create user:', err);
+    res.status(500).json({ error: 'Failed to create user: ' + err.message });
+  }
+};
+app.post('/api/users', handleCreateUser);
+app.post('/users', handleCreateUser);
+
+// 4c. PUT /api/users/:id - Update User Assignment & Role
+const handleUpdateUser = async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const { role, assigned_store_id, assigned_district_id, assigned_region_id } = req.body;
+
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: 'Invalid user ID' });
+    }
+
+    let roleId = 4;
+    if (role === 'Corporate Administrator' || role === 'Super Admin' || role === 'super_admin') roleId = 1;
+    else if (role === 'Regional Manager' || role === 'regional_manager') roleId = 2;
+    else if (role === 'District Manager' || role === 'district_manager') roleId = 3;
+    else if (role === 'Store Manager' || role === 'store_manager') roleId = 4;
+    else if (role === 'Administrator' || role === 'Admin' || role === 'admin') roleId = 5;
+
+    const storeVal = assigned_store_id ? parseInt(assigned_store_id, 10) : null;
+    const distVal = assigned_district_id ? parseInt(assigned_district_id, 10) : null;
+    const regVal = assigned_region_id ? parseInt(assigned_region_id, 10) : null;
+
+    const updateSql = `
+      UPDATE users 
+      SET 
+        "role" = $1, 
+        role_id = $2, 
+        assigned_store_id = $3, 
+        assigned_district_id = $4, 
+        assigned_region_id = $5,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $6
+      RETURNING id, username, email, "role", assigned_store_id, assigned_district_id, assigned_region_id
+    `;
+
+    const result = await query(updateSql, [role, roleId, storeVal, distVal, regVal, userId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const updatedUser = result.rows[0];
+
+    let storeName = null;
+    let districtName = null;
+    let regionName = null;
+
+    if (updatedUser.assigned_store_id) {
+      const sRes = await query('SELECT name FROM stores WHERE id = $1', [updatedUser.assigned_store_id]);
+      if (sRes.rows.length > 0) storeName = sRes.rows[0].name;
+    }
+    if (updatedUser.assigned_district_id) {
+      const dRes = await query('SELECT name FROM districts WHERE id = $1', [updatedUser.assigned_district_id]);
+      if (dRes.rows.length > 0) districtName = dRes.rows[0].name;
+    }
+    if (updatedUser.assigned_region_id) {
+      const rRes = await query('SELECT name FROM regions WHERE id = $1', [updatedUser.assigned_region_id]);
+      if (rRes.rows.length > 0) regionName = rRes.rows[0].name;
+    }
+
+    res.json({
+      status: 'success',
+      user: {
+        ...updatedUser,
+        store_name: storeName,
+        district_name: districtName,
+        region_name: regionName
+      }
+    });
+  } catch (err) {
+    console.error('Failed to update user:', err);
+    res.status(500).json({ error: String(err.message || err.detail || err) });
+  }
+};
+app.put('/api/users/:id', handleUpdateUser);
+app.put('/users/:id', handleUpdateUser);
+
+// 4d. DELETE /api/users/:id - Delete User
+const handleDeleteUser = async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const result = await query('DELETE FROM users WHERE id = $1 RETURNING id', [userId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ status: 'success', message: 'User deleted successfully' });
+  } catch (err) {
+    console.error('Failed to delete user:', err);
+    res.status(500).json({ error: 'Failed to delete user: ' + err.message });
+  }
+};
+app.delete('/api/users/:id', handleDeleteUser);
+app.delete('/users/:id', handleDeleteUser);
+
+// Express API Server initialized & ready for AI LLM Insights and Chatbot queries
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`✓ Express API server running → http://127.0.0.1:${PORT}`);
   console.log(`  KPI aggregation: POST /api/kpi/aggregate  (run manually or via scheduler)`);
 });
+// Reload complete

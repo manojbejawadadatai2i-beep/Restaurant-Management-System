@@ -183,7 +183,7 @@ export type Permission =
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   'Corporate Administrator': ['view:scope-filters', 'view:dashboard', 'view:reports'],
   'Administrator': ['view:user-management', 'view:scope-filters'],
-  'Regional Manager': ['view:dashboard', 'view:reports'],
-  'District Manager': ['view:dashboard', 'view:reports'],
+  'Regional Manager': ['view:dashboard', 'view:reports', 'view:scope-filters'],
+  'District Manager': ['view:dashboard', 'view:reports', 'view:scope-filters'],
   'Store Manager': ['view:dashboard', 'view:reports'],
 };
