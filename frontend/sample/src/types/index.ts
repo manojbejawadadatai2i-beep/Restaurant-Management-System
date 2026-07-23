@@ -185,5 +185,5 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   'Administrator': ['view:user-management', 'view:scope-filters'],
   'Regional Manager': ['view:dashboard', 'view:reports', 'view:scope-filters'],
   'District Manager': ['view:dashboard', 'view:reports', 'view:scope-filters'],
-  'Store Manager': ['view:dashboard', 'view:reports'],
+  'Store Manager': ['view:dashboard', 'view:reports', 'view:scope-filters'],
 };

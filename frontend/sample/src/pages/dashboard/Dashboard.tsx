@@ -21,7 +21,12 @@ import {
   Flame,
   Receipt,
   CheckCircle2,
-  Clock
+  Clock,
+  Globe,
+  MapPin,
+  SlidersHorizontal,
+  RotateCcw,
+  ShieldCheck
 } from 'lucide-react';
 import { 
   AreaChart,
@@ -125,10 +130,32 @@ export const Dashboard: React.FC = () => {
     fetchFilters();
   }, [currentUser]);
 
-  // Sync search parameters to filter states on initial load
+  // Sync user role defaults and URL search parameters to filter states
   useEffect(() => {
     if (stores.length === 0) return;
     
+    // Auto-scope filters based on user role if no explicit search param is active
+    const role = currentUser?.role;
+    if (!storeIdParam && !districtIdParam && !regionIdParam) {
+      if (role === 'Store Manager' && currentUser?.assigned_store_id) {
+        setFilterStore(currentUser.assigned_store_id.toString());
+        const matchedStore = stores.find(s => s.id === currentUser.assigned_store_id);
+        if (matchedStore) {
+          setFilterDistrict(matchedStore.district_id.toString());
+          setFilterRegion(matchedStore.region_id.toString());
+        }
+      } else if (role === 'District Manager' && currentUser?.assigned_district_id) {
+        setFilterDistrict(currentUser.assigned_district_id.toString());
+        const matchedDist = districts.find(d => d.id === currentUser.assigned_district_id);
+        if (matchedDist) {
+          setFilterRegion(matchedDist.region_id.toString());
+        }
+      } else if (role === 'Regional Manager' && currentUser?.assigned_region_id) {
+        setFilterRegion(currentUser.assigned_region_id.toString());
+      }
+      return;
+    }
+
     if (storeIdParam) {
       setFilterStore(storeIdParam);
       const matchedStore = stores.find(s => s.id === parseInt(storeIdParam, 10));
@@ -148,7 +175,7 @@ export const Dashboard: React.FC = () => {
       setFilterDistrict('');
       setFilterStore('');
     }
-  }, [storeIdParam, districtIdParam, regionIdParam, stores, districts]);
+  }, [storeIdParam, districtIdParam, regionIdParam, stores, districts, currentUser]);
 
   useEffect(() => {
     const dateParam = searchParams.get('date');
@@ -201,12 +228,21 @@ export const Dashboard: React.FC = () => {
   }, [data]);
 
   const [itemTab, setItemTab] = useState<'top' | 'lowest'>('top');
+  const [selectedItemName, setSelectedItemName] = useState<string | null>(null);
+
   const activeMetrics = activeData?.metrics || data?.metrics;
   const activeScopeName = activeData?.scopeName || data?.scopeName || 'All Operations';
   const activeRevenueTrend = activeData?.revenueTrend || data?.revenueTrend || [];
   const activeOrderDistribution = activeData?.orderDistribution || data?.orderDistribution || [];
-  const activeTopSelling = data?.topSelling || [];
-  const activeLowestSelling = data?.lowestSelling || [];
+  const activeTopSelling = React.useMemo(() => {
+    const list = data?.topSelling || [];
+    return [...list].sort((a, b) => (Number(b.sold) || 0) - (Number(a.sold) || 0) || (Number(b.revenue) || 0) - (Number(a.revenue) || 0));
+  }, [data?.topSelling]);
+
+  const activeLowestSelling = React.useMemo(() => {
+    const list = data?.lowestSelling || [];
+    return [...list].sort((a, b) => (Number(a.sold) || 0) - (Number(b.sold) || 0) || (Number(a.revenue) || 0) - (Number(b.revenue) || 0));
+  }, [data?.lowestSelling]);
 
   // Top 5 stores system-wide for benchmark comparison
   const top5Stores = data?.top5StoresCorporate || [];
@@ -345,19 +381,44 @@ export const Dashboard: React.FC = () => {
     updateSelectedDate(current.toISOString().split('T')[0]);
   };
 
-  const visibleDistricts = filterRegion 
-    ? districts.filter(d => d.region_id === parseInt(filterRegion, 10))
-    : districts;
+  const userRole = currentUser?.role;
+  const isCorporate = userRole === 'Corporate Administrator' || userRole === 'Administrator';
+  const isRegionalManager = userRole === 'Regional Manager';
+  const isDistrictManager = userRole === 'District Manager';
+  const isStoreManager = userRole === 'Store Manager';
 
-  const visibleStores = stores.filter(s => {
-    if (filterDistrict && s.district_id !== parseInt(filterDistrict, 10)) {
-      return false;
+  // Role permissions for each level of scope selection
+  const canFilterRegion = isCorporate;
+  const canFilterDistrict = isCorporate || isRegionalManager;
+  const canFilterStore = isCorporate || isRegionalManager || isDistrictManager;
+
+  const visibleDistricts = React.useMemo(() => {
+    if (isRegionalManager && currentUser?.assigned_region_id) {
+      return districts.filter(d => d.region_id === currentUser.assigned_region_id);
     }
-    if (filterRegion && s.region_id !== parseInt(filterRegion, 10)) {
-      return false;
+    if (filterRegion) {
+      return districts.filter(d => d.region_id === parseInt(filterRegion, 10));
     }
-    return true;
-  });
+    return districts;
+  }, [districts, filterRegion, isRegionalManager, currentUser]);
+
+  const visibleStores = React.useMemo(() => {
+    return stores.filter(s => {
+      if (isDistrictManager && currentUser?.assigned_district_id) {
+        if (s.district_id !== currentUser.assigned_district_id) return false;
+      }
+      if (isRegionalManager && currentUser?.assigned_region_id) {
+        if (s.region_id !== currentUser.assigned_region_id) return false;
+      }
+      if (filterDistrict && s.district_id !== parseInt(filterDistrict, 10)) {
+        return false;
+      }
+      if (filterRegion && s.region_id !== parseInt(filterRegion, 10)) {
+        return false;
+      }
+      return true;
+    });
+  }, [stores, filterDistrict, filterRegion, isDistrictManager, isRegionalManager, currentUser]);
 
   const showSelectors = hasPermission('view:scope-filters');
 
@@ -426,14 +487,21 @@ export const Dashboard: React.FC = () => {
             </button>
           </div>
 
-          {(filterRegion || filterDistrict || filterStore) && (
+          {(filterRegion || filterDistrict || filterStore) && !isStoreManager && (
             <button
               onClick={() => {
-                setFilterRegion('');
-                setFilterDistrict('');
-                setFilterStore('');
+                if (isDistrictManager) {
+                  setFilterStore('');
+                } else if (isRegionalManager) {
+                  setFilterDistrict('');
+                  setFilterStore('');
+                } else {
+                  setFilterRegion('');
+                  setFilterDistrict('');
+                  setFilterStore('');
+                }
               }}
-              className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-350 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all active:scale-95"
+              className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-350 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all active:scale-95 cursor-pointer"
             >
               ← Clear Filters
             </button>
@@ -441,59 +509,125 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Regional / Store Selectors (Frontend Only Filter) */}
+      {/* 2. Scope Navigator Theme UI (Role-restricted Filter Scope) */}
       {showSelectors && (
-        <Card className="p-4 shadow-[0_8px_30px_rgb(0,0,0,0.02)] flex flex-wrap items-center gap-4 transition-colors">
-          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            <Filter size={12} className="text-blue-500" /> Filter Scope
+        <div className="relative overflow-hidden rounded-2xl border border-indigo-100 dark:border-slate-800 bg-gradient-to-r from-white via-indigo-50/30 to-slate-50 dark:from-slate-900 dark:via-indigo-950/20 dark:to-slate-900 p-4 shadow-sm transition-all">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            
+            {/* Title & Role Info */}
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-md shadow-indigo-500/20 flex items-center justify-center">
+                <SlidersHorizontal size={16} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-extrabold uppercase tracking-widest text-slate-800 dark:text-slate-200">
+                    Filter Scope
+                  </h3>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
+                    <ShieldCheck size={11} />
+                    {userRole || 'Scope Navigator'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                  {canFilterRegion ? 'Select enterprise region, district, or store' :
+                   canFilterDistrict ? `Scoped to ${currentUser?.region_name || 'Regional Jurisdiction'}` :
+                   canFilterStore ? `Scoped to ${currentUser?.district_name || 'District Jurisdiction'}` :
+                   `Assigned Store: ${currentUser?.store_name || 'Single Outlet'}`}
+                </p>
+              </div>
+            </div>
+
+            {/* Filter Dropdowns Container */}
+            <div className="flex flex-wrap items-center gap-3 flex-1 md:justify-end min-w-[280px]">
+              
+              {/* Region Dropdown (Only for Corporate / Enterprise Admins) */}
+              {canFilterRegion && (
+                <div className="flex-1 min-w-[150px] max-w-[200px]">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
+                    <Globe size={11} className="text-indigo-500" /> Region
+                  </label>
+                  <Select
+                    value={filterRegion}
+                    onChange={(e) => handleRegionChange(e.target.value)}
+                    placeholder="All Regions"
+                    options={regions.map(r => ({ value: r.id, label: r.name }))}
+                    className="bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold"
+                  />
+                </div>
+              )}
+
+              {/* District Dropdown (For Corporate & Regional Managers) */}
+              {canFilterDistrict && (
+                <div className="flex-1 min-w-[150px] max-w-[200px]">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
+                    <MapPin size={11} className="text-purple-500" /> District
+                  </label>
+                  <Select
+                    value={filterDistrict}
+                    onChange={(e) => handleDistrictChange(e.target.value)}
+                    placeholder={canFilterRegion ? "All Districts" : `${currentUser?.region_name || 'Region'} Districts`}
+                    options={visibleDistricts.map(d => ({ value: d.id, label: d.name }))}
+                    className="bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold"
+                  />
+                </div>
+              )}
+
+              {/* Store Dropdown (For Corporate, Regional, & District Managers) */}
+              {canFilterStore && (
+                <div className="flex-1 min-w-[160px] max-w-[220px]">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
+                    <Store size={11} className="text-blue-500" /> Store Outlet
+                  </label>
+                  <Select
+                    value={filterStore}
+                    onChange={(e) => handleStoreChange(e.target.value)}
+                    placeholder={
+                      isDistrictManager
+                        ? `All Stores in ${currentUser?.district_name || 'District'}`
+                        : "All Stores"
+                    }
+                    options={visibleStores.map(s => ({ value: s.id, label: s.name }))}
+                    className="bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold"
+                  />
+                </div>
+              )}
+
+              {/* Store Manager Read-Only Outlet Indicator */}
+              {isStoreManager && (
+                <div className="px-3.5 py-2 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 flex items-center gap-2">
+                  <Store size={14} className="text-blue-600 dark:text-blue-400" />
+                  <span className="text-xs font-bold text-blue-700 dark:text-blue-300">
+                    {currentUser?.store_name || 'Assigned Store Outlet'}
+                  </span>
+                </div>
+              )}
+
+              {/* Clear / Reset Filters Button */}
+              {(filterRegion || filterDistrict || filterStore) && !isStoreManager && (
+                <button
+                  onClick={() => {
+                    if (isDistrictManager) {
+                      setFilterStore('');
+                    } else if (isRegionalManager) {
+                      setFilterDistrict('');
+                      setFilterStore('');
+                    } else {
+                      setFilterRegion('');
+                      setFilterDistrict('');
+                      setFilterStore('');
+                    }
+                  }}
+                  className="mt-4 md:mt-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 bg-slate-100 hover:bg-rose-50 dark:bg-slate-800 dark:hover:bg-rose-950/30 transition-all cursor-pointer"
+                  title="Reset Scope Filters"
+                >
+                  <RotateCcw size={12} />
+                  <span>Reset</span>
+                </button>
+              )}
+            </div>
           </div>
-
-          <div className="flex flex-wrap gap-3 flex-1 min-w-[280px]">
-            {/* Region Dropdown */}
-            <div className="flex-1 min-w-[130px]">
-              <Select
-                value={filterRegion}
-                onChange={(e) => handleRegionChange(e.target.value)}
-                placeholder="All Regions"
-                options={regions.map(r => ({ value: r.id, label: r.name }))}
-              />
-            </div>
-
-            {/* District Dropdown */}
-            <div className="flex-1 min-w-[130px]">
-              <Select
-                value={filterDistrict}
-                onChange={(e) => handleDistrictChange(e.target.value)}
-                placeholder="All Districts"
-                options={visibleDistricts.map(d => ({ value: d.id, label: d.name }))}
-              />
-            </div>
-
-            {/* Store Dropdown */}
-            <div className="flex-1 min-w-[130px]">
-              <Select
-                value={filterStore}
-                onChange={(e) => handleStoreChange(e.target.value)}
-                placeholder="All Stores"
-                options={visibleStores.map(s => ({ value: s.id, label: s.name }))}
-              />
-            </div>
-          </div>
-
-          {/* Clear Filters Button */}
-          {(filterRegion || filterDistrict || filterStore) && (
-            <button
-              onClick={() => {
-                setFilterRegion('');
-                setFilterDistrict('');
-                setFilterStore('');
-              }}
-              className="text-[10px] uppercase tracking-wider font-bold text-red-500 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20"
-            >
-              Reset
-            </button>
-          )}
-        </Card>
+        </div>
       )}
 
       {/* 3. Summary Metrics Cards (Grid of 6) */}
@@ -1098,11 +1232,23 @@ export const Dashboard: React.FC = () => {
 
           <CardContent className="pt-0">
             <div className="space-y-2.5">
-              {(itemTab === 'top' ? activeTopSelling : activeLowestSelling).slice(0, 5).map((item, idx) => {
-                const maxRev = (itemTab === 'top' ? activeTopSelling : activeLowestSelling)[0]?.revenue || 1;
-                const pct = Math.min(100, Math.max(5, Math.round((item.revenue / (maxRev || 1)) * 100)));
+              {((itemTab === 'top' ? activeTopSelling : activeLowestSelling).slice(0, 5)).map((item, idx) => {
+                const currentList = (itemTab === 'top' ? activeTopSelling : activeLowestSelling).slice(0, 5);
+                const maxVal = Math.max(...currentList.map(i => Number(i.sold) || 0), 1);
+                const pct = Math.min(100, Math.max(5, Math.round(((Number(item.sold) || 0) / maxVal) * 100)));
+                const isSelected = selectedItemName === item.name;
+                const unitPrice = item.sold > 0 ? (item.revenue / item.sold) : 0;
+
                 return (
-                  <div key={idx} className="p-2.5 rounded-xl bg-slate-50/70 dark:bg-slate-950/30 border border-slate-100 dark:border-slate-800 flex flex-col gap-1.5">
+                  <div 
+                    key={idx} 
+                    onClick={() => setSelectedItemName(isSelected ? null : item.name)}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer select-none ${
+                      isSelected
+                        ? 'bg-orange-50/90 dark:bg-orange-950/40 border-orange-300 dark:border-orange-700 shadow-sm ring-1 ring-orange-400/30'
+                        : 'bg-slate-50/70 dark:bg-slate-950/30 border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 hover:bg-slate-100/60 dark:hover:bg-slate-900/60'
+                    }`}
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className={`w-5 h-5 rounded-md font-extrabold text-[10px] flex items-center justify-center ${
@@ -1113,16 +1259,28 @@ export const Dashboard: React.FC = () => {
                           #{idx + 1}
                         </span>
                         <div>
-                          <h4 className="text-xs font-bold text-slate-800 dark:text-white leading-tight">{item.name}</h4>
-                          <span className="text-[10px] font-semibold text-slate-400">{item.category} • {formatNumber(item.sold)} units sold</span>
+                          <h4 className="text-xs font-bold text-slate-800 dark:text-white leading-tight flex items-center gap-1.5">
+                            <span>{item.name}</span>
+                            <span className="text-[9px] font-normal text-slate-400 dark:text-slate-500">
+                              ({item.category})
+                            </span>
+                          </h4>
+                          <span className="text-[10px] font-extrabold text-slate-600 dark:text-slate-300">
+                            {formatNumber(item.sold)} units sold
+                          </span>
                         </div>
                       </div>
-                      <span className="text-xs font-extrabold text-slate-900 dark:text-white font-mono">
-                        {formatCurrency(item.revenue)}
-                      </span>
+
+                      <div className="text-right flex flex-col items-end">
+                        <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <IndianRupee size={10} />
+                          {isSelected ? 'Hide Revenue' : 'Click for Revenue'}
+                        </span>
+                      </div>
                     </div>
-                    {/* Visual sales share progress bar */}
-                    <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+
+                    {/* Quantity-filled visual progress bar */}
+                    <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden mt-2">
                       <div 
                         className={`h-full rounded-full transition-all duration-500 ${
                           itemTab === 'top' 
@@ -1132,6 +1290,24 @@ export const Dashboard: React.FC = () => {
                         style={{ width: `${pct}%` }}
                       />
                     </div>
+
+                    {/* Interactive Expanded Detail Card: Total Amount Collected on Click */}
+                    {isSelected && (
+                      <div className="mt-2.5 pt-2.5 border-t border-orange-200/60 dark:border-orange-900/40 grid grid-cols-2 gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-orange-100 dark:border-orange-950/60">
+                          <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">Total Collected</span>
+                          <span className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
+                            {formatCurrency(item.revenue)}
+                          </span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-orange-100 dark:border-orange-950/60">
+                          <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">Avg Unit Price</span>
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-200 font-mono">
+                            {formatCurrency(unitPrice)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

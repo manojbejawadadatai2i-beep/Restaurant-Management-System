@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import api from '../../utils/axios';
-import { Store, MapPin, Landmark, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Store, MapPin, Landmark, ArrowRight, ShieldCheck, Search, X, Building2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import { Alert } from '../../components/ui/Alert';
 
@@ -35,6 +35,7 @@ export const StoresList: React.FC = () => {
   const [stores, setStores] = useState<DBStore[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const fetchMetadata = async () => {
@@ -52,6 +53,55 @@ export const StoresList: React.FC = () => {
     };
     fetchMetadata();
   }, []);
+
+  const getDistrictName = (districtId: number) => {
+    return districts.find(d => d.id === districtId)?.name || 'Unknown District';
+  };
+
+  const getRegionName = (regionId: number) => {
+    return regions.find(r => r.id === regionId)?.name || 'Unknown Region';
+  };
+
+  // Filter stores according to logged in user's scoped permissions & search query
+  const scopedStores = useMemo(() => {
+    return stores.filter(s => {
+      if (!currentUser) return false;
+      
+      if (currentUser.role === 'Corporate Administrator' || currentUser.role === 'Administrator') {
+        return true;
+      }
+      if (currentUser.role === 'Regional Manager') {
+        return s.region_id === currentUser.assigned_region_id;
+      }
+      if (currentUser.role === 'District Manager') {
+        return s.district_id === currentUser.assigned_district_id;
+      }
+      if (currentUser.role === 'Store Manager') {
+        return s.id === currentUser.assigned_store_id;
+      }
+      return false;
+    });
+  }, [stores, currentUser]);
+
+  const filteredStores = useMemo(() => {
+    if (!searchQuery.trim()) return scopedStores;
+    const q = searchQuery.toLowerCase().trim();
+    return scopedStores.filter(s => {
+      const distName = getDistrictName(s.district_id).toLowerCase();
+      const regName = getRegionName(s.region_id).toLowerCase();
+      return (
+        s.name.toLowerCase().includes(q) ||
+        (s.store_code && s.store_code.toLowerCase().includes(q)) ||
+        (s.city && s.city.toLowerCase().includes(q)) ||
+        distName.includes(q) ||
+        regName.includes(q)
+      );
+    });
+  }, [scopedStores, searchQuery, districts, regions]);
+
+  const handleStoreClick = (storeId: number) => {
+    navigate(`/dashboard?storeId=${storeId}`);
+  };
 
   if (loading) {
     return (
@@ -72,132 +122,141 @@ export const StoresList: React.FC = () => {
     );
   }
 
-  // Filter stores according to logged in user's scoped permissions
-  const filteredStores = stores.filter(s => {
-    if (!currentUser) return false;
-    
-    // Corporate Admin and Administrator can view everything
-    if (currentUser.role === 'Corporate Administrator' || currentUser.role === 'Administrator') {
-      return true;
-    }
-    
-    // Regional Manager can view stores inside their assigned region
-    if (currentUser.role === 'Regional Manager') {
-      return s.region_id === currentUser.assigned_region_id;
-    }
-    
-    // District Manager can view stores inside their assigned district
-    if (currentUser.role === 'District Manager') {
-      return s.district_id === currentUser.assigned_district_id;
-    }
-    
-    // Store Manager can only view their own store
-    if (currentUser.role === 'Store Manager') {
-      return s.id === currentUser.assigned_store_id;
-    }
-    
-    return false;
-  });
-
-  const getDistrictName = (districtId: number) => {
-    return districts.find(d => d.id === districtId)?.name || 'Unknown District';
-  };
-
-  const getRegionName = (regionId: number) => {
-    return regions.find(r => r.id === regionId)?.name || 'Unknown Region';
-  };
-
-  const handleStoreClick = (storeId: number) => {
-    navigate(`/dashboard?storeId=${storeId}`);
-  };
-
   return (
     <div className="space-y-6 pb-10">
-      {/* Upper header */}
+      {/* Header & Controls */}
       <Card>
-        <CardHeader className="border-b-0 pb-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-500 flex items-center justify-center flex-shrink-0">
-              <Store size={20} />
+        <CardHeader className="border-b-0 pb-2">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-500 flex items-center justify-center flex-shrink-0">
+                <Store size={20} />
+              </div>
+              <div>
+                <CardTitle className="text-base font-extrabold text-slate-900 dark:text-white">
+                  Asset & Store Scope Directory
+                </CardTitle>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider mt-0.5">
+                  Authorized Outlets: {filteredStores.length} of {scopedStores.length}
+                </p>
+              </div>
             </div>
-            <div>
-              <CardTitle>Asset & Store Scope Directory</CardTitle>
-              <p className="text-[10px] text-slate-450 dark:text-slate-500 font-bold uppercase tracking-wider mt-0.5">
-                Authorized Stores: {filteredStores.length} of {stores.length}
-              </p>
+
+            {/* Search Input Box */}
+            <div className="relative flex-1 max-w-md">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <Search size={15} />
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search stores by name, code, city, district, or region..."
+                className="w-full pl-9 pr-8 py-2 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-            Click on any store below to view its specific store metrics, order trends, AOV, and expenses. Your view list is strictly restricted based on your role scope security policy.
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Select any store row below to launch its metrics dashboard. Use the search bar to filter by store name, location, or district.
           </p>
         </CardContent>
       </Card>
 
-      {/* Grid of Stores */}
-      {filteredStores.length === 0 ? (
-        <div className="text-center py-12 text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
-          <p className="text-sm font-semibold">No authorized stores found.</p>
+      {/* Row List Container with Custom Scroll Bar */}
+      <Card className="p-0 overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+            <Building2 size={13} className="text-indigo-500" /> Authorized Store Directory
+          </span>
+          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded">
+            {filteredStores.length} Rows
+          </span>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredStores.map(store => (
-            <div
-              key={store.id}
-              onClick={() => handleStoreClick(store.id)}
-              className="group cursor-pointer rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 shadow-[0_8px_30px_rgb(0,0,0,0.015)] dark:shadow-none hover:shadow-[0_12px_40px_rgba(99,102,241,0.05)] dark:hover:border-indigo-500/50 hover:border-indigo-500/30 transition-all duration-300 transform hover:-translate-y-1 flex flex-col justify-between overflow-hidden"
+
+        {filteredStores.length === 0 ? (
+          <div className="text-center py-12 text-slate-400">
+            <Store size={32} className="mx-auto text-slate-300 dark:text-slate-700 mb-2" />
+            <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+              No matching stores found for "{searchQuery}".
+            </p>
+            <button
+              onClick={() => setSearchQuery('')}
+              className="mt-2 text-xs font-bold text-indigo-500 hover:underline"
             >
-              {/* Card Upper */}
-              <div className="p-5 space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/20 text-indigo-500 group-hover:bg-indigo-500 group-hover:text-white transition-colors duration-300">
-                    <Store size={20} />
+              Clear Search Query
+            </button>
+          </div>
+        ) : (
+          /* Fixed height scrollable container for rows */
+          <div className="max-h-[520px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80 pr-1">
+            {filteredStores.map(store => (
+              <div
+                key={store.id}
+                onClick={() => handleStoreClick(store.id)}
+                className="group p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20 transition-all cursor-pointer select-none"
+              >
+                {/* Store Info & Code */}
+                <div className="flex items-center gap-3.5 min-w-[240px]">
+                  <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-200">
+                    <Store size={18} />
                   </div>
-                  <span className="text-[9px] font-extrabold px-2.5 py-0.5 rounded-full bg-slate-50 dark:bg-slate-950 text-slate-400 dark:text-slate-500 border border-slate-100/60 dark:border-slate-850 uppercase tracking-widest">
-                    {store.store_code || `STR-${store.id}`}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-extrabold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        {store.name}
+                      </h4>
+                      <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 uppercase">
+                        {store.store_code || `STR-${store.id}`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400 dark:text-slate-500 mt-0.5">
+                      <MapPin size={11} className="text-slate-400" />
+                      <span>{store.city || 'Unknown City'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scope Hierarchy Badges */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-350 bg-slate-50 dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-100 dark:border-slate-800">
+                    <MapPin size={12} className="text-indigo-400" />
+                    <span className="text-[10px] font-bold uppercase text-slate-400">District:</span>
+                    <span className="font-bold text-xs">{getDistrictName(store.district_id)}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-350 bg-slate-50 dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-100 dark:border-slate-800">
+                    <Landmark size={12} className="text-purple-400" />
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Region:</span>
+                    <span className="font-bold text-xs">{getRegionName(store.region_id)}</span>
+                  </div>
+                </div>
+
+                {/* Right Action Trigger */}
+                <div className="flex items-center gap-2 justify-end sm:justify-start">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                    <ShieldCheck size={12} className="text-indigo-500" /> Authorized
+                  </span>
+                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-1 transition-transform flex items-center gap-1">
+                    View Dashboard <ArrowRight size={13} />
                   </span>
                 </div>
-
-                <div>
-                  <h3 className="font-extrabold text-slate-850 dark:text-white text-sm group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors duration-200 line-clamp-1">
-                    {store.name}
-                  </h3>
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 dark:text-slate-500 mt-1">
-                    <MapPin size={12} className="text-slate-400" />
-                    <span>{store.city || 'Unknown City'}</span>
-                  </div>
-                </div>
-
-                {/* Scope Hierarchy metadata */}
-                <div className="space-y-2 border-t border-slate-50 dark:border-slate-800/50 pt-4">
-                  <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-350">
-                    <MapPin size={13} className="text-slate-400" />
-                    <span className="font-semibold text-[10px] uppercase text-slate-400 dark:text-slate-500 w-16">District</span>
-                    <span className="font-bold truncate">{getDistrictName(store.district_id)}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-350">
-                    <Landmark size={13} className="text-slate-400" />
-                    <span className="font-semibold text-[10px] uppercase text-slate-400 dark:text-slate-500 w-16">Region</span>
-                    <span className="font-bold truncate">{getRegionName(store.region_id)}</span>
-                  </div>
-                </div>
               </div>
-
-              {/* Card Footer Action */}
-              <div className="bg-slate-50/50 dark:bg-slate-950/20 px-5 py-3 border-t border-slate-50 dark:border-slate-800/40 flex items-center justify-between group-hover:bg-indigo-500/5 dark:group-hover:bg-indigo-500/10 transition-colors duration-300">
-                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-                  <ShieldCheck size={12} className="text-indigo-500" /> Authorized Access
-                </span>
-                <span className="text-xs font-bold text-indigo-500 dark:text-indigo-400 flex items-center gap-1 group-hover:translate-x-1.5 transition-transform duration-300">
-                  Dashboard <ArrowRight size={13} />
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 };
+
 export default StoresList;

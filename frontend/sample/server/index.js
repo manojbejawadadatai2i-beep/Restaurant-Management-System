@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { pool } from './db.js';
 import { OAuth2Client } from 'google-auth-library';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,6 +14,24 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SECRET_KEY || '164961ae7e4cff5cfac36d5c76e6b9caa92467f9b2ef1921b0d188b205af6fed';
+
+const generateJwtToken = (user) => {
+  const payload = {
+    sub: String(user.id),
+    id: user.id,
+    user_id: `emp_${user.id}`,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    assigned_store_id: user.assigned_store_id,
+    assigned_district_id: user.assigned_district_id,
+    assigned_region_id: user.assigned_region_id,
+    iss: 'ocean_view_express_api'
+  };
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
+};
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -114,7 +133,7 @@ const handleLogin = async (req, res) => {
       user.requires_password_change === true ||
       user.is_new_user === true;
 
-    const token = `token_emp_${user.id}_${Date.now()}`;
+    const token = generateJwtToken(user);
 
     res.json({
       message: 'Login successful',
@@ -230,7 +249,7 @@ const handleGoogleLogin = async (req, res) => {
 
     // Allow Google login regardless of the stored login_method flag. The app now treats the
     // default as 'both', while preserving stricter policies if explicitly configured.
-    const token = `google_token_${user.id}_${Date.now()}`;
+    const token = generateJwtToken(user);
 
     res.json({
       message: 'Google login successful',
@@ -355,6 +374,12 @@ app.post('/api/users', async (req, res) => {
       }
     }
 
+    let roleId = 4;
+    const roleRes = await query('SELECT id FROM roles WHERE role_name = $1 LIMIT 1', [role]);
+    if (roleRes.rows.length > 0) {
+      roleId = roleRes.rows[0].id;
+    }
+
     const result = await query(`
       INSERT INTO users (
         username, full_name, email, password_hash, role, role_id, 
@@ -364,11 +389,10 @@ app.post('/api/users', async (req, res) => {
         login_method
       ) 
       VALUES (
-        $1, $1, $2, $3, $4, 
-        (SELECT id FROM roles WHERE role_name = $4 LIMIT 1),
-        $5, $5, 
+        $1, $1, $2, $3, $4, $5, 
         $6, $6, 
         $7, $7, 
+        $8, $8, 
         'both'
       )
       RETURNING id
@@ -377,6 +401,7 @@ app.post('/api/users', async (req, res) => {
       email || null,
       bcrypt.hashSync(finalPassword, 12),
       role,
+      roleId,
       finalStoreId,
       finalDistrictId,
       finalRegionId
@@ -982,11 +1007,11 @@ app.get('/api/dashboard', async (req, res) => {
 
     if (!topSellingRes || topSellingRes.length === 0) {
       topSellingRes = [
-        { name: 'Seafood Platter', category: 'Mains', sold: Math.round(totalOrders * 0.2), revenue: parseFloat((totalRevenue * 0.3).toFixed(2)) },
-        { name: 'Garlic Butter Lobster', category: 'Mains', sold: Math.round(totalOrders * 0.15), revenue: parseFloat((totalRevenue * 0.25).toFixed(2)) },
-        { name: 'Grilled Salmon', category: 'Mains', sold: Math.round(totalOrders * 0.25), revenue: parseFloat((totalRevenue * 0.2).toFixed(2)) },
-        { name: 'Crispy Calamari', category: 'Appetizers', sold: Math.round(totalOrders * 0.25), revenue: parseFloat((totalRevenue * 0.15).toFixed(2)) },
-        { name: 'Chocolate Lava Cake', category: 'Desserts', sold: Math.round(totalOrders * 0.15), revenue: parseFloat((totalRevenue * 0.1).toFixed(2)) }
+        { name: 'Seafood Platter', category: 'Mains', sold: Math.round(totalOrders * 0.25), revenue: parseFloat((totalRevenue * 0.30).toFixed(2)) },
+        { name: 'Garlic Butter Lobster', category: 'Mains', sold: Math.round(totalOrders * 0.20), revenue: parseFloat((totalRevenue * 0.25).toFixed(2)) },
+        { name: 'Grilled Salmon', category: 'Mains', sold: Math.round(totalOrders * 0.18), revenue: parseFloat((totalRevenue * 0.20).toFixed(2)) },
+        { name: 'Crispy Calamari', category: 'Appetizers', sold: Math.round(totalOrders * 0.15), revenue: parseFloat((totalRevenue * 0.15).toFixed(2)) },
+        { name: 'Chocolate Lava Cake', category: 'Desserts', sold: Math.round(totalOrders * 0.10), revenue: parseFloat((totalRevenue * 0.10).toFixed(2)) }
       ];
     }
 
@@ -2452,48 +2477,6 @@ const handleGetUsers = async (req, res) => {
 app.get('/api/users', handleGetUsers);
 app.get('/users', handleGetUsers);
 
-// 4b. POST /api/users - Create New User
-const handleCreateUser = async (req, res) => {
-  try {
-    const { username, email, role, assigned_store_id, assigned_district_id, assigned_region_id, password } = req.body;
-
-    if (!username || !role) {
-      return res.status(400).json({ error: 'Username and role are required' });
-    }
-
-    let roleId = 4;
-    if (role === 'Corporate Administrator' || role === 'Super Admin' || role === 'super_admin') roleId = 1;
-    else if (role === 'Regional Manager' || role === 'regional_manager') roleId = 2;
-    else if (role === 'District Manager' || role === 'district_manager') roleId = 3;
-    else if (role === 'Store Manager' || role === 'store_manager') roleId = 4;
-    else if (role === 'Administrator' || role === 'Admin' || role === 'admin') roleId = 5;
-
-    const userPassword = password || `Pass@${Math.floor(1000 + Math.random() * 9000)}`;
-    const storeVal = assigned_store_id ? parseInt(assigned_store_id, 10) : null;
-    const distVal = assigned_district_id ? parseInt(assigned_district_id, 10) : null;
-    const regVal = assigned_region_id ? parseInt(assigned_region_id, 10) : null;
-
-    const insertSql = `
-      INSERT INTO users (username, email, password_hash, "role", role_id, assigned_store_id, assigned_district_id, assigned_region_id, is_active, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, CURRENT_TIMESTAMP)
-      RETURNING id, username, email, "role", assigned_store_id, assigned_district_id, assigned_region_id
-    `;
-
-    const result = await query(insertSql, [username, email || `${username.toLowerCase()}@oceanview.com`, userPassword, role, roleId, storeVal, distVal, regVal]);
-    const newUser = result.rows[0];
-
-    res.json({
-      status: 'success',
-      ...newUser,
-      password: userPassword
-    });
-  } catch (err) {
-    console.error('Failed to create user:', err);
-    res.status(500).json({ error: 'Failed to create user: ' + err.message });
-  }
-};
-app.post('/api/users', handleCreateUser);
-app.post('/users', handleCreateUser);
 
 // 4c. PUT /api/users/:id - Update User Assignment & Role
 const handleUpdateUser = async (req, res) => {

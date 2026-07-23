@@ -135,11 +135,11 @@ class DashboardService:
 
         # 7. Top Selling — derived from the selected-date orders total
         top_selling = [
-            { "name": "Seafood Platter", "category": "Mains", "sold": int(round(total_ord * 0.2)), "revenue": float(round(total_rev * 0.3, 2)) },
-            { "name": "Garlic Butter Lobster", "category": "Mains", "sold": int(round(total_ord * 0.15)), "revenue": float(round(total_rev * 0.25, 2)) },
-            { "name": "Grilled Salmon", "category": "Mains", "sold": int(round(total_ord * 0.25)), "revenue": float(round(total_rev * 0.2, 2)) },
-            { "name": "Crispy Calamari", "category": "Appetizers", "sold": int(round(total_ord * 0.25)), "revenue": float(round(total_rev * 0.15, 2)) },
-            { "name": "Chocolate Lava Cake", "category": "Desserts", "sold": int(round(total_ord * 0.15)), "revenue": float(round(total_rev * 0.1, 2)) }
+            { "name": "Seafood Platter", "category": "Mains", "sold": int(round(total_ord * 0.25)), "revenue": float(round(total_rev * 0.30, 2)) },
+            { "name": "Garlic Butter Lobster", "category": "Mains", "sold": int(round(total_ord * 0.20)), "revenue": float(round(total_rev * 0.25, 2)) },
+            { "name": "Grilled Salmon", "category": "Mains", "sold": int(round(total_ord * 0.18)), "revenue": float(round(total_rev * 0.20, 2)) },
+            { "name": "Crispy Calamari", "category": "Appetizers", "sold": int(round(total_ord * 0.15)), "revenue": float(round(total_rev * 0.15, 2)) },
+            { "name": "Chocolate Lava Cake", "category": "Desserts", "sold": int(round(total_ord * 0.10)), "revenue": float(round(total_rev * 0.10, 2)) }
         ]
 
         # 9. Recent Orders

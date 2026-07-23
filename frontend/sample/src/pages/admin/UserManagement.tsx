@@ -85,14 +85,18 @@ export const UserManagement: React.FC = () => {
   };
 
   // Helper: download a single-row credentials CSV instantly
-  const downloadCredentials = (data: { username: string; email: string; password: string; role: string }) => {
+  const downloadCredentials = (data: { username?: string; email?: string; password?: string; role?: string }) => {
+    const uname = data.username || username || 'user';
+    const uemail = data.email || email || `${uname.toLowerCase().replace(/\s+/g, '_')}@restaurant.com`;
+    const upass = data.password || '';
+    const urole = data.role || role || 'Store Manager';
     const header = 'Username,Email,Password,Role';
-    const row = `"${data.username}","${data.email}","${data.password}","${data.role}"`;
+    const row = `"${uname}","${uemail}","${upass}","${urole}"`;
     const blob = new Blob([header + '\n' + row], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `credentials_${data.username.replace(/\s+/g, '_')}.csv`;
+    a.download = `credentials_${uname.replace(/\s+/g, '_')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
