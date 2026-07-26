@@ -9,7 +9,6 @@ import {
   IndianRupee, 
   TrendingUp, 
   TrendingDown,
-  Filter,
   Store,
   XCircle,
   Sparkles,

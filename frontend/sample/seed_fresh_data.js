@@ -31,9 +31,21 @@ async function seedFreshData() {
       'Divya Choudhary', 'Sameer Khan', 'Nisha Thomas', 'Amit Kumar', 'Shruti Das'
     ];
 
-    const dates = [
-      '2026-07-14', '2026-07-15', '2026-07-16', '2026-07-17', '2026-07-18', '2026-07-19', '2026-07-20'
-    ];
+    const getDatesUpToToday = (numDays = 30) => {
+      const datesList = [];
+      const todayObj = new Date();
+      for (let i = numDays - 1; i >= 0; i--) {
+        const d = new Date(todayObj);
+        d.setDate(todayObj.getDate() - i);
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        datesList.push(`${yyyy}-${mm}-${dd}`);
+      }
+      return datesList;
+    };
+
+    const dates = getDatesUpToToday(30);
 
     const hours = [11, 12, 13, 14, 15, 18, 19, 20, 21, 22]; // Peak hours
 

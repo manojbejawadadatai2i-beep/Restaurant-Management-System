@@ -135,13 +135,27 @@ export const rebuildKpiTablesAndAggregate = async () => {
   await runCascadingAggregation();
 };
 
+function getDatesUpToToday(numDays = 30) {
+  const datesList = [];
+  const todayObj = new Date();
+  for (let i = numDays - 1; i >= 0; i--) {
+    const d = new Date(todayObj);
+    d.setDate(todayObj.getDate() - i);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    datesList.push(`${yyyy}-${mm}-${dd}`);
+  }
+  return datesList;
+}
+
 // Seed store level daily KPIs from orders
 async function seedStoreData() {
   console.log('6. Seeding Level 0 daily_store_kpis...');
   
   const storesRes = await pool.query('SELECT id FROM stores ORDER BY id');
   const stores = storesRes.rows;
-  const dates = ['2026-07-14', '2026-07-15', '2026-07-16', '2026-07-17', '2026-07-18', '2026-07-19', '2026-07-20', '2026-07-21'];
+  const dates = getDatesUpToToday(30);
 
   for (const store of stores) {
     for (const dateStr of dates) {
@@ -197,7 +211,7 @@ async function seedRealOrdersAndItems() {
 
   const storesRes = await pool.query('SELECT id FROM stores ORDER BY id');
   const stores = storesRes.rows;
-  const dates = ['2026-07-14', '2026-07-15', '2026-07-16', '2026-07-17', '2026-07-18', '2026-07-19', '2026-07-20', '2026-07-21'];
+  const dates = getDatesUpToToday(30);
   
   const customers = [
     'Ananya Sharma', 'Rahul Verma', 'Priya Patel', 'Vikram Singh',

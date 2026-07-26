@@ -545,7 +545,12 @@ const seedDatabase = async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const toDateStr = (d) => d.toISOString().split('T')[0];
+    const toDateStr = (d) => {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
 
     // Daily growth/variation multipliers (slightly different each day, realistic weekday patterns)
     const dayVariation = (dayIndex) => {

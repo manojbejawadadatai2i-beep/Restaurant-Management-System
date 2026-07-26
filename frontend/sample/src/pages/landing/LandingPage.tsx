@@ -225,12 +225,12 @@ export const LandingPage: React.FC = () => {
           {/* Credentials Login Form */}
           <form onSubmit={handleCredentialsSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-slate-405 dark:text-slate-400 uppercase tracking-wider block">Email Address</label>
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">Email or Username</label>
               <div className="relative">
                 <input
-                  type="email"
+                  type="text"
                   required
-                  placeholder="name@restaurant.com"
+                  placeholder="email@restaurant.com or Username"
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-500/50 focus:border-orange-500 transition-all placeholder-slate-400 dark:placeholder-slate-500"
